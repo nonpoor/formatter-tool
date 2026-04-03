@@ -20,11 +20,12 @@
 ## Read In This Order
 1. [HANDOFF.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/HANDOFF.md)
 2. [TASKS.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/TASKS.md)
-3. [ARCHITECTURE.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/ARCHITECTURE.md)
-4. [DECISIONS.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/DECISIONS.md)
-5. [PROJECT_BRIEF.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/PROJECT_BRIEF.md)
-6. [UI_STYLE_GUIDE.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/UI_STYLE_GUIDE.md)（仅 UI 任务）
-7. 核心代码目录：`src/features/formatter/`
+3. [WORKFLOW.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/WORKFLOW.md)
+4. [ARCHITECTURE.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/ARCHITECTURE.md)
+5. [DECISIONS.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/DECISIONS.md)
+6. [PROJECT_BRIEF.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/PROJECT_BRIEF.md)
+7. [UI_STYLE_GUIDE.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/UI_STYLE_GUIDE.md)（仅 UI 任务）
+8. 核心代码目录：`src/features/formatter/`
 
 ## Important Constraints
 - `default` 模板使用 `legacy`；仅 `experiment-report`/`course-paper`/`general-homework` 使用 `academic`。
@@ -32,6 +33,8 @@
 - 规则实现集中在 normalize 阶段；render 层不重复做业务判断。
 - UI 当前为收口版本，除非明确需求，不做大改。
 - 禁止新增遥测/外部网络依赖。
+- 先读代码再写文档，不允许脱离代码现状更新文档。
+- 不编造项目目标，目标变更需先更新 `PROJECT_BRIEF.md` 并标注原因。
 
 ## Key Directories
 - `src/features/formatter/parser`：输入解析
@@ -53,4 +56,4 @@ npm run build
 ## Definition of Done (Current Work)
 - 新增/修改规则后，`npm run lint && npm test -- --run && npm run build` 全通过。
 - 至少有 1 条对应测试覆盖变更场景。
-- HANDOFF/TASKS 同步更新，下一线程无需回读聊天记录即可接手。
+- 收尾时必须同步更新 HANDOFF/TASKS（见 [WORKFLOW.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/WORKFLOW.md)）。

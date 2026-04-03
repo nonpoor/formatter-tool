@@ -2,6 +2,7 @@
 
 Related Docs:
 - [HANDOFF.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/HANDOFF.md)
+- [WORKFLOW.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/WORKFLOW.md)
 - [DECISIONS.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/DECISIONS.md)
 - [ARCHITECTURE.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/ARCHITECTURE.md)
 
@@ -15,6 +16,11 @@ Related Docs:
 - 目标：代码状态和文档状态同步，避免新线程误判。
 - 位置：`docs/context/*`。
 - 验收标准：最近一次改动可在 HANDOFF + DECISIONS 中找到记录。
+
+3. 收尾自动交接执行（高优先）
+- 目标：每次任务结束自动执行交接流程。
+- 位置：`docs/context/WORKFLOW.md`、`docs/context/HANDOFF.md`、`docs/context/TASKS.md`。
+- 验收标准：任务结束时均有 HANDOFF/TASKS 更新记录。
 
 ## Next
 1. `.docx` 输出结构增强评估

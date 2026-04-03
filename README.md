@@ -104,10 +104,13 @@ ngrok http 3000
 1. `docs/context/START_HERE.md`
 2. `docs/context/HANDOFF.md`
 3. `docs/context/TASKS.md`
-4. `docs/context/ARCHITECTURE.md`
-5. `docs/context/DECISIONS.md`
-6. `docs/context/PROJECT_BRIEF.md`
-7. `docs/context/ROADMAP.md`
-8. `docs/context/UI_STYLE_GUIDE.md`（涉及 UI 时）
+4. `docs/context/WORKFLOW.md`
+5. `docs/context/ARCHITECTURE.md`
+6. `docs/context/DECISIONS.md`
+7. `docs/context/PROJECT_BRIEF.md`
+8. `docs/context/ROADMAP.md`
+9. `docs/context/UI_STYLE_GUIDE.md`（涉及 UI 时）
+
+项目级 AI 规则位于 `AGENTS.md`，用于约束“先读代码再写文档、不要编造目标、收尾自动更新 HANDOFF/TASKS”。
 
 这样可以在有限上下文下持续推进同一项目，不丢决策与进度。
