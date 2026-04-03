@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClipboardEvent } from "react";
 import {
   detectSourceType,
@@ -14,6 +14,7 @@ import {
   type TemplateId,
 } from "@/features/formatter";
 import { copyOptimizedToClipboard } from "@/features/formatter/clipboard";
+import { resolvePastedInput } from "@/features/formatter/paste";
 import styles from "./FormatterTool.module.css";
 
 const initialInput = `# 标题示例
@@ -32,12 +33,21 @@ const defaultOptions: Omit<FormatOptions, "templateId"> = {
   listRepair: true,
 };
 
+type StatusTone = "neutral" | "success" | "error";
+type CopyState = "idle" | "success" | "error";
+
 export function FormatterTool() {
   const [input, setInput] = useState(initialInput);
   const [templateId, setTemplateId] = useState<TemplateId>("default");
   const [options, setOptions] = useState(defaultOptions);
+  const [preserveRichPaste, setPreserveRichPaste] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState("已就绪");
+  const [status, setStatus] = useState<{ message: string; tone: StatusTone }>({
+    message: "已就绪",
+    tone: "neutral",
+  });
+  const [copyState, setCopyState] = useState<CopyState>("idle");
+  const copyResetTimerRef = useRef<number | null>(null);
 
   const detectedSourceType = useMemo(() => detectSourceType(input), [input]);
   const doc = useMemo(
@@ -49,9 +59,32 @@ export function FormatterTool() {
     [input, options, templateId],
   );
 
+  useEffect(() => {
+    return () => {
+      if (copyResetTimerRef.current !== null) {
+        window.clearTimeout(copyResetTimerRef.current);
+      }
+    };
+  }, []);
+
+  function updateStatus(message: string, tone: StatusTone = "neutral") {
+    setStatus({ message, tone });
+  }
+
+  function setTemporaryCopyState(nextState: Exclude<CopyState, "idle">) {
+    setCopyState(nextState);
+    if (copyResetTimerRef.current !== null) {
+      window.clearTimeout(copyResetTimerRef.current);
+    }
+    copyResetTimerRef.current = window.setTimeout(() => {
+      setCopyState("idle");
+      copyResetTimerRef.current = null;
+    }, 1800);
+  }
+
   async function handleExportDocx() {
     if (!doc.blocks.length) {
-      setStatus("没有可导出的内容。");
+      updateStatus("没有可导出的内容。", "error");
       return;
     }
 
@@ -64,9 +97,9 @@ export function FormatterTool() {
       link.download = "格式整理结果.docx";
       link.click();
       URL.revokeObjectURL(url);
-      setStatus("已导出 .docx");
+      updateStatus("已导出 .docx", "success");
     } catch {
-      setStatus("导出失败，请重试。");
+      updateStatus("导出失败，请重试。", "error");
     } finally {
       setBusy(false);
     }
@@ -74,16 +107,19 @@ export function FormatterTool() {
 
   async function handleCopyOptimized() {
     if (!doc.blocks.length) {
-      setStatus("没有可复制的内容。");
+      setCopyState("error");
+      updateStatus("没有可复制的内容。", "error");
       return;
     }
 
     setBusy(true);
     try {
       await copyOptimizedToClipboard(doc);
-      setStatus("已复制优化版（含 HTML + 纯文本）。");
+      setTemporaryCopyState("success");
+      updateStatus("已复制优化版（含 HTML + 纯文本）。", "success");
     } catch {
-      setStatus("复制失败，请检查浏览器权限后重试。");
+      setTemporaryCopyState("error");
+      updateStatus("复制失败，请检查浏览器权限后重试。", "error");
     } finally {
       setBusy(false);
     }
@@ -93,19 +129,35 @@ export function FormatterTool() {
     const html = event.clipboardData.getData("text/html");
     const plain = event.clipboardData.getData("text/plain");
 
-    if (!html) {
+    if (!html && !plain) {
       return;
     }
 
     event.preventDefault();
-    setInput(html || plain);
-    setStatus("已接收富文本粘贴内容。");
+    const resolved = resolvePastedInput({
+      html,
+      plain,
+      preserveRichText: preserveRichPaste,
+    });
+    setInput(resolved.value);
+
+    if (resolved.mode === "html") {
+      updateStatus("已粘贴并保留富文本（白名单清洗后）。", "success");
+    } else if (resolved.mode === "plain") {
+      updateStatus("已粘贴纯文本内容。", "success");
+    } else {
+      updateStatus("粘贴内容为空。", "neutral");
+    }
   }
+
+  const copyButtonLabel =
+    copyState === "success" ? "已复制" : copyState === "error" ? "复制失败" : busy ? "复制中..." : "复制优化版";
 
   return (
     <div className={styles.page}>
       <header className={styles.hero}>
-        <h1>文本整理与格式转换工具</h1>
+        <p className={styles.kicker}>Formatter MVP</p>
+        <h1>文本整理与格式转换</h1>
         <p>把 AI 网页复制内容整理成更适合 Word / WPS 的格式。</p>
       </header>
 
@@ -169,6 +221,14 @@ export function FormatterTool() {
             />
             空行整理
           </label>
+          <label className={styles.switch}>
+            <input
+              type="checkbox"
+              checked={preserveRichPaste}
+              onChange={(event) => setPreserveRichPaste(event.target.checked)}
+            />
+            保留富文本粘贴
+          </label>
         </div>
 
         <label htmlFor="raw-input" className={styles.label}>
@@ -193,17 +253,25 @@ export function FormatterTool() {
 
       <section className={styles.actions}>
         <button type="button" className={styles.primary} onClick={handleExportDocx} disabled={busy}>
-          导出 .docx
+          {busy ? "处理中..." : "导出 .docx"}
         </button>
-        <button type="button" className={styles.secondary} onClick={handleCopyOptimized} disabled={busy}>
-          复制优化版
+        <button
+          type="button"
+          className={`${styles.secondary} ${copyState === "success" ? styles.secondarySuccess : ""} ${
+            copyState === "error" ? styles.secondaryError : ""
+          }`}
+          onClick={handleCopyOptimized}
+          disabled={busy}
+          aria-live="polite"
+        >
+          {copyButtonLabel}
         </button>
         <button
           type="button"
           className={styles.ghost}
           onClick={() => {
             setInput("");
-            setStatus("已清空输入。");
+            updateStatus("已清空输入。", "neutral");
           }}
           disabled={busy}
         >
@@ -224,7 +292,9 @@ export function FormatterTool() {
         </ul>
       </section>
 
-      <footer className={styles.status}>{status}</footer>
+      <footer className={`${styles.status} ${styles[`status${status.tone}`]}`} aria-live="polite">
+        {status.message}
+      </footer>
     </div>
   );
 }
@@ -261,7 +331,7 @@ function PreviewBlock({ block }: { block: BlockNode }) {
   if (block.type === "list") {
     const ListTag = block.ordered ? "ol" : "ul";
     return (
-      <ListTag className={styles.list}>
+      <ListTag className={styles.list} start={block.ordered ? block.start : undefined}>
         {block.items.map((item, idx) => (
           <li key={idx}>
             {item.blocks.map((inner, innerIdx) => (
@@ -280,6 +350,31 @@ function PreviewBlock({ block }: { block: BlockNode }) {
           <PreviewBlock key={idx} block={inner} />
         ))}
       </blockquote>
+    );
+  }
+
+  if (block.type === "table") {
+    return (
+      <div className={styles.tableWrap}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              {block.headers.map((cell, idx) => (
+                <th key={idx}>{renderInlineNodes(cell)}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {block.rows.map((row, rowIndex) => (
+              <tr key={rowIndex}>
+                {row.map((cell, cellIndex) => (
+                  <td key={cellIndex}>{renderInlineNodes(cell)}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     );
   }
 

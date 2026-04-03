@@ -35,6 +35,7 @@ export interface ListItem {
 export interface ListBlock {
   type: "list";
   ordered: boolean;
+  start?: number;
   items: ListItem[];
 }
 
@@ -49,7 +50,13 @@ export interface PreformattedBlock {
   language?: string;
 }
 
-export type BlockNode = HeadingBlock | ParagraphBlock | ListBlock | BlockquoteBlock | PreformattedBlock;
+export interface TableBlock {
+  type: "table";
+  headers: InlineNode[][];
+  rows: InlineNode[][][];
+}
+
+export type BlockNode = HeadingBlock | ParagraphBlock | ListBlock | BlockquoteBlock | PreformattedBlock | TableBlock;
 
 export interface DocumentMeta {
   sourceType: SourceType;

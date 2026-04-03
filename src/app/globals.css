@@ -1,9 +1,9 @@
 :root {
-  --bg: #f5f6f8;
-  --text: #1d1d1f;
-  --line: #d9d9de;
-  --muted: #6f6f76;
-  --focus: #8db2ff;
+  --bg: #f2f2f0;
+  --text: #18191c;
+  --line: #d4d4d8;
+  --muted: #6b6d73;
+  --focus: #8f8f94;
 }
 
 html {
@@ -19,8 +19,13 @@ body {
 body {
   min-height: 100%;
   color: var(--text);
-  background: var(--bg);
-  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+  background:
+    radial-gradient(1200px 520px at 12% -6%, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 72%),
+    radial-gradient(980px 460px at 88% 6%, rgba(230, 231, 233, 0.56) 0%, rgba(230, 231, 233, 0) 70%),
+    radial-gradient(900px 420px at 50% 120%, rgba(222, 223, 226, 0.42) 0%, rgba(222, 223, 226, 0) 70%),
+    linear-gradient(180deg, #f5f5f4 0%, #efefee 45%, #ececeb 100%);
+  font-family: "SF Pro Display", "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Helvetica Neue",
+    sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;

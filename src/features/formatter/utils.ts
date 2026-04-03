@@ -72,8 +72,16 @@ export function charCountFromBlocks(blocks: BlockNode[]): number {
       total += charCountFromBlocks(block.blocks);
     } else if (block.type === "preformatted") {
       total += cleanTextValue(block.text).length;
+    } else if (block.type === "table") {
+      for (const header of block.headers) {
+        total += plainTextFromInlines(header).length;
+      }
+      for (const row of block.rows) {
+        for (const cell of row) {
+          total += plainTextFromInlines(cell).length;
+        }
+      }
     }
   }
   return total;
 }
-

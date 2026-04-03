@@ -7,6 +7,7 @@ type HtmlNode = {
   nodeName: string;
   tagName?: string;
   value?: string;
+  attrs?: Array<{ name: string; value: string }>;
   childNodes?: HtmlNode[];
 };
 
@@ -69,6 +70,7 @@ function parseHtmlBlocks(nodes: HtmlNode[], warnings: string[]): BlockNode[] {
         blocks.push({
           type: "list",
           ordered: tag === "ol",
+          start: tag === "ol" ? getOlStart(node) : undefined,
           items,
         });
       }
@@ -188,3 +190,14 @@ function extractText(node: HtmlNode): string {
   return result;
 }
 
+function getOlStart(node: HtmlNode): number | undefined {
+  const startAttr = node.attrs?.find((attr) => attr.name.toLowerCase() === "start")?.value;
+  if (!startAttr) {
+    return 1;
+  }
+  const parsed = Number.parseInt(startAttr, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 1;
+  }
+  return parsed;
+}

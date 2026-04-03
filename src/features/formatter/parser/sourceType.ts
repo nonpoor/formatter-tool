@@ -2,7 +2,7 @@ import type { SourceType } from "@/features/formatter/model/types";
 
 const HTML_TAG_REGEX = /<(p|br|strong|em|ul|ol|li|h1|h2|h3|blockquote|pre)\b[^>]*>/i;
 const MARKDOWN_REGEX =
-  /(^|\n)\s{0,3}(#{1,3}\s+|[-*•]\s+|\d+[.)]\s+|>\s+)|\*\*[^*]+\*\*|\*[^*\n]+\*|(^|\n)\s*```/m;
+  /(^|\n)\s{0,3}(#{1,3}\s+|[-*+•●○◦▪▫·・‧]\s+|(?:\d+|[０-９]+)[.)）．、]\s*|[（(](?:\d+|[０-９]+)[)）]\s*|>\s+)|\*\*[^*]+\*\*|\*[^*\n]+\*|(^|\n)\s*```|(\|.+\|\n\|[\s:-]+\|)/m;
 
 export function detectSourceType(input: string): SourceType {
   const value = input.trim();
@@ -24,4 +24,3 @@ export function detectSourceType(input: string): SourceType {
   }
   return "plain";
 }
-

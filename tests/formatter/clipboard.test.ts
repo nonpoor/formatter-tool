@@ -49,10 +49,89 @@ describe("复制优化版输出", () => {
     expect(output.html).toContain("<blockquote>");
     expect(output.html).toContain("<pre>");
 
-    expect(output.html).not.toMatch(/<(div|span|table|img|script)/i);
+    expect(output.html).not.toMatch(/<(div|span|img|script)/i);
     expect(output.html).not.toMatch(/\b(class|style)=/i);
 
     expect(output.text).toContain("标题");
     expect(output.text).toContain("列表项");
+  });
+
+  it("列表项输出为稳定结构，避免 li 内块级嵌套和空项", () => {
+    const doc: DocumentModel = {
+      ...sampleDoc,
+      blocks: [
+        {
+          type: "list",
+          ordered: false,
+          items: [
+            {
+              blocks: [
+                { type: "paragraph", inlines: [{ type: "text", value: "第一行" }] },
+                { type: "paragraph", inlines: [{ type: "text", value: "第二行" }] },
+              ],
+            },
+            {
+              blocks: [{ type: "paragraph", inlines: [{ type: "text", value: "   " }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const output = renderClipboard(doc);
+
+    expect(output.html).toContain("<ul>");
+    expect(output.html).toContain("<li>第一行<br>第二行");
+    expect(output.html).not.toContain("<li></li>");
+    expect(output.html).not.toContain("<li><p>");
+  });
+
+  it("有序列表保留起始编号", () => {
+    const doc: DocumentModel = {
+      ...sampleDoc,
+      blocks: [
+        {
+          type: "list",
+          ordered: true,
+          start: 2,
+          items: [
+            { blocks: [{ type: "paragraph", inlines: [{ type: "text", value: "二号" }] }] },
+            { blocks: [{ type: "paragraph", inlines: [{ type: "text", value: "三号" }] }] },
+          ],
+        },
+      ],
+    };
+
+    const output = renderClipboard(doc);
+    expect(output.html).toContain('<ol start="2">');
+    expect(output.text).toContain("2. 二号");
+    expect(output.text).toContain("3. 三号");
+  });
+
+  it("表格输出为基础 table 结构", () => {
+    const doc: DocumentModel = {
+      ...sampleDoc,
+      blocks: [
+        {
+          type: "table",
+          headers: [
+            [{ type: "text", value: "名称" }],
+            [{ type: "text", value: "值" }],
+          ],
+          rows: [
+            [
+              [{ type: "text", value: "A" }],
+              [{ type: "text", value: "1" }],
+            ],
+          ],
+        },
+      ],
+    };
+
+    const output = renderClipboard(doc);
+    expect(output.html).toContain("<table>");
+    expect(output.html).toContain("<thead>");
+    expect(output.html).toContain("<tbody>");
+    expect(output.text).toContain("名称\t值");
   });
 });

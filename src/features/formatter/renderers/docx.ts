@@ -1,39 +1,26 @@
 import {
-  AlignmentType,
   Document as DocxDocument,
   HeadingLevel,
-  LevelFormat,
   Packer,
   Paragraph,
+  Table,
+  TableCell,
+  TableRow,
   TextRun,
+  WidthType,
 } from "docx";
 import type { BlockNode, DocumentModel, InlineNode } from "@/features/formatter/model/types";
 import { getTemplateConfig } from "@/features/formatter/templates";
 
 export async function renderDocx(doc: DocumentModel): Promise<Blob> {
   const template = getTemplateConfig(doc.meta.templateId);
-  const paragraphs = blocksToParagraphs(doc.blocks, template.fontSize, template.paragraphSpacingAfter, template.headingSpacingAfter);
+  const children = blocksToDocxChildren(doc.blocks, template.fontSize, template.paragraphSpacingAfter, template.headingSpacingAfter);
 
   const file = new DocxDocument({
-    numbering: {
-      config: [
-        {
-          reference: "ordered-list",
-          levels: [
-            {
-              level: 0,
-              format: LevelFormat.DECIMAL,
-              text: "%1.",
-              alignment: AlignmentType.START,
-            },
-          ],
-        },
-      ],
-    },
     sections: [
       {
         properties: {},
-        children: paragraphs,
+        children,
       },
     ],
   });
@@ -41,14 +28,14 @@ export async function renderDocx(doc: DocumentModel): Promise<Blob> {
   return Packer.toBlob(file);
 }
 
-function blocksToParagraphs(
+function blocksToDocxChildren(
   blocks: BlockNode[],
   fontSize: number,
   paragraphSpacingAfter: number,
   headingSpacingAfter: number,
   leftIndent = 0,
-): Paragraph[] {
-  const result: Paragraph[] = [];
+): Array<Paragraph | Table> {
+  const result: Array<Paragraph | Table> = [];
 
   for (const block of blocks) {
     if (block.type === "heading") {
@@ -75,21 +62,18 @@ function blocksToParagraphs(
     }
 
     if (block.type === "list") {
+      const orderedStart = block.ordered ? block.start ?? 1 : 1;
       block.items.forEach((item, itemIndex) => {
         item.blocks.forEach((childBlock) => {
           if (childBlock.type === "paragraph") {
+            const numberedPrefix = block.ordered ? `${orderedStart + itemIndex}. ` : "";
             result.push(
               new Paragraph({
-                children: inlineToRuns(childBlock.inlines, fontSize),
+                children: block.ordered
+                  ? [new TextRun({ text: numberedPrefix, size: fontSize }), ...inlineToRuns(childBlock.inlines, fontSize)]
+                  : inlineToRuns(childBlock.inlines, fontSize),
                 spacing: { after: paragraphSpacingAfter },
                 bullet: block.ordered ? undefined : { level: 0 },
-                numbering: block.ordered
-                  ? {
-                      reference: "ordered-list",
-                      level: 0,
-                      instance: 1,
-                    }
-                  : undefined,
                 indent: leftIndent > 0 ? { left: leftIndent } : undefined,
               }),
             );
@@ -124,7 +108,7 @@ function blocksToParagraphs(
             return;
           }
 
-          result.push(...blocksToParagraphs([childBlock], fontSize, paragraphSpacingAfter, headingSpacingAfter, leftIndent));
+          result.push(...blocksToDocxChildren([childBlock], fontSize, paragraphSpacingAfter, headingSpacingAfter, leftIndent));
         });
 
         if (itemIndex === block.items.length - 1) {
@@ -135,7 +119,47 @@ function blocksToParagraphs(
     }
 
     if (block.type === "blockquote") {
-      result.push(...blocksToParagraphs(block.blocks, fontSize, paragraphSpacingAfter, headingSpacingAfter, leftIndent + 600));
+      result.push(...blocksToDocxChildren(block.blocks, fontSize, paragraphSpacingAfter, headingSpacingAfter, leftIndent + 600));
+      continue;
+    }
+
+    if (block.type === "table") {
+      result.push(
+        new Table({
+          width: {
+            size: 100,
+            type: WidthType.PERCENTAGE,
+          },
+          rows: [
+            new TableRow({
+              children: block.headers.map((cell) =>
+                new TableCell({
+                  children: [
+                    new Paragraph({
+                      children: inlineToRuns(cell, fontSize, true),
+                    }),
+                  ],
+                }),
+              ),
+            }),
+            ...block.rows.map(
+              (row) =>
+                new TableRow({
+                  children: row.map(
+                    (cell) =>
+                      new TableCell({
+                        children: [
+                          new Paragraph({
+                            children: inlineToRuns(cell, fontSize),
+                          }),
+                        ],
+                      }),
+                  ),
+                }),
+            ),
+          ],
+        }),
+      );
       continue;
     }
 
@@ -157,14 +181,14 @@ function blocksToParagraphs(
   return result;
 }
 
-function inlineToRuns(inlines: InlineNode[], fontSize: number): TextRun[] {
+function inlineToRuns(inlines: InlineNode[], fontSize: number, forceBold = false): TextRun[] {
   return inlines.map((inline) => {
     if (inline.type === "lineBreak") {
       return new TextRun({ text: "", break: 1, size: fontSize });
     }
     return new TextRun({
       text: inline.value,
-      bold: inline.marks?.bold,
+      bold: forceBold || inline.marks?.bold,
       italics: inline.marks?.italic,
       size: fontSize,
     });

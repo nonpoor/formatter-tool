@@ -3,14 +3,16 @@ import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
 import type { BlockNode, InlineNode, TextMarks } from "@/features/formatter/model/types";
 import { parseHtmlInput } from "@/features/formatter/parser/htmlParser";
-import { cleanTextValue, pushTextInline } from "@/features/formatter/utils";
+import { cleanTextValue, plainTextFromInlines, pushTextInline } from "@/features/formatter/utils";
 
 type MdNode = {
   type: string;
   depth?: number;
   ordered?: boolean;
+  start?: number | null;
   lang?: string | null;
   value?: string;
+  align?: Array<"left" | "right" | "center" | null>;
   children?: MdNode[];
 };
 
@@ -35,7 +37,15 @@ function parseMarkdownBlocks(nodes: MdNode[]): BlockNode[] {
     if (node.type === "paragraph") {
       const inlines = parseMarkdownInlines(node.children ?? []);
       if (inlines.length > 0) {
-        blocks.push({ type: "paragraph", inlines });
+        const paragraphText = plainTextFromInlines(inlines);
+        if (looksLikePipeTableText(paragraphText)) {
+          blocks.push({
+            type: "preformatted",
+            text: paragraphText,
+          });
+        } else {
+          blocks.push({ type: "paragraph", inlines });
+        }
       }
       continue;
     }
@@ -51,6 +61,7 @@ function parseMarkdownBlocks(nodes: MdNode[]): BlockNode[] {
         blocks.push({
           type: "list",
           ordered: Boolean(node.ordered),
+          start: Boolean(node.ordered) ? normalizeListStart(node.start) : undefined,
           items,
         });
       }
@@ -71,6 +82,25 @@ function parseMarkdownBlocks(nodes: MdNode[]): BlockNode[] {
         text: cleanTextValue(node.value ?? ""),
         language: node.lang ?? undefined,
       });
+      continue;
+    }
+
+    if (node.type === "table") {
+      const tableRows = node.children ?? [];
+      if (tableRows.length === 0) {
+        continue;
+      }
+
+      const headers = parseMarkdownTableRow(tableRows[0]);
+      const rows = tableRows.slice(1).map((row) => parseMarkdownTableRow(row));
+
+      if (headers.length > 0) {
+        blocks.push({
+          type: "table",
+          headers,
+          rows,
+        });
+      }
       continue;
     }
 
@@ -128,4 +158,24 @@ function clampHeadingLevel(value: number): 1 | 2 | 3 {
     return 2;
   }
   return 3;
+}
+
+function parseMarkdownTableRow(node: MdNode): InlineNode[][] {
+  if (node.type !== "tableRow") {
+    return [];
+  }
+
+  return (node.children ?? []).map((cell) => parseMarkdownInlines(cell.children ?? []));
+}
+
+function normalizeListStart(start?: number | null): number {
+  if (typeof start === "number" && Number.isFinite(start) && start > 0) {
+    return Math.floor(start);
+  }
+  return 1;
+}
+
+function looksLikePipeTableText(text: string): boolean {
+  const normalized = text.replace(/\r\n/g, "\n");
+  return /\|/.test(normalized) && /\n/.test(normalized);
 }

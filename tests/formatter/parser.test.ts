@@ -40,4 +40,27 @@ describe("解析器 - 受控子集", () => {
     expect(doc.meta.sourceType).toBe("mixed");
     expect(doc.blocks.length).toBeGreaterThan(0);
   });
+
+  it("保留有序列表的起始编号", () => {
+    const input = `2. 第二项\n3. 第三项`;
+    const doc = formatInput(input);
+
+    expect(doc.blocks[0]?.type).toBe("list");
+    if (doc.blocks[0]?.type === "list") {
+      expect(doc.blocks[0].ordered).toBe(true);
+      expect(doc.blocks[0].start).toBe(2);
+      expect(doc.blocks[0].items).toHaveLength(2);
+    }
+  });
+
+  it("支持 Markdown 管道表格识别", () => {
+    const input = `| 列1 | 列2 |\n| --- | --- |\n| A | B |\n| C | D |`;
+    const doc = formatInput(input);
+
+    expect(doc.blocks[0]?.type).toBe("table");
+    if (doc.blocks[0]?.type === "table") {
+      expect(doc.blocks[0].headers).toHaveLength(2);
+      expect(doc.blocks[0].rows).toHaveLength(2);
+    }
+  });
 });

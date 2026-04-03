@@ -1,4 +1,4 @@
-import type { BlockNode, DocumentModel, InlineNode } from "@/features/formatter/model/types";
+import type { BlockNode, DocumentModel, InlineNode, ListItem, TableBlock } from "@/features/formatter/model/types";
 import { plainTextFromInlines } from "@/features/formatter/utils";
 
 export interface ClipboardPayload {
@@ -23,16 +23,18 @@ function renderBlockHtml(block: BlockNode): string {
 
   if (block.type === "list") {
     const tag = block.ordered ? "ol" : "ul";
+    const startAttr = block.ordered && (block.start ?? 1) > 1 ? ` start="${block.start}"` : "";
+
     const items = block.items
-      .map((item) => {
-        if (item.blocks.length === 1 && item.blocks[0].type === "paragraph") {
-          return `<li>${renderInlineHtml(item.blocks[0].inlines)}</li>`;
-        }
-        const content = item.blocks.map((child) => renderBlockHtml(child)).join("");
-        return `<li>${content}</li>`;
-      })
+      .map((item) => renderListItemHtml(item).trim())
+      .filter(Boolean)
+      .map((itemHtml) => `<li>${itemHtml}</li>`)
       .join("");
-    return `<${tag}>${items}</${tag}>`;
+
+    if (!items) {
+      return "";
+    }
+    return `<${tag}${startAttr}>${items}</${tag}>`;
   }
 
   if (block.type === "blockquote") {
@@ -40,7 +42,59 @@ function renderBlockHtml(block: BlockNode): string {
     return `<blockquote>${inner}</blockquote>`;
   }
 
+  if (block.type === "table") {
+    return renderTableHtml(block);
+  }
+
   return `<pre>${escapeHtml(block.text)}</pre>`;
+}
+
+function renderListItemHtml(item: ListItem): string {
+  const inlineParts: string[] = [];
+  const nestedListParts: string[] = [];
+
+  for (const block of item.blocks) {
+    if (block.type === "paragraph" || block.type === "heading") {
+      const value = renderInlineHtml(block.inlines).trim();
+      if (value) {
+        inlineParts.push(value);
+      }
+      continue;
+    }
+
+    if (block.type === "blockquote") {
+      const quoteText = block.blocks
+        .map((inner) => renderBlockPlainOneLine(inner))
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+      if (quoteText) {
+        inlineParts.push(`&gt; ${escapeHtml(quoteText)}`);
+      }
+      continue;
+    }
+
+    if (block.type === "preformatted") {
+      const text = escapeHtml(block.text).trim();
+      if (text) {
+        inlineParts.push(text.replace(/\n/g, "<br>"));
+      }
+      continue;
+    }
+
+    if (block.type === "table") {
+      const tableText = renderTablePlain(block).replace(/\n/g, "<br>").trim();
+      if (tableText) {
+        inlineParts.push(escapeHtml(tableText));
+      }
+      continue;
+    }
+
+    nestedListParts.push(renderBlockHtml(block));
+  }
+
+  const primary = inlineParts.join("<br>");
+  return [primary, ...nestedListParts.filter(Boolean)].filter(Boolean).join("");
 }
 
 function renderInlineHtml(inlines: InlineNode[]): string {
@@ -65,56 +119,110 @@ function renderInlineHtml(inlines: InlineNode[]): string {
     .join("");
 }
 
-function renderPlainText(blocks: BlockNode[]): string {
+function renderTableHtml(table: TableBlock): string {
+  const headerHtml = table.headers.map((cell) => `<th>${renderInlineHtml(cell)}</th>`).join("");
+  const bodyHtml = table.rows
+    .map((row) => `<tr>${row.map((cell) => `<td>${renderInlineHtml(cell)}</td>`).join("")}</tr>`)
+    .join("");
+
+  return `<table><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
+}
+
+function renderPlainText(blocks: BlockNode[], indent = ""): string {
   return blocks
     .map((block) => {
       if (block.type === "heading") {
-        return `${plainTextFromInlines(block.inlines)}\n`;
+        return `${indent}${plainTextFromInlines(block.inlines)}\n`;
       }
       if (block.type === "paragraph") {
-        return `${plainTextFromInlines(block.inlines)}\n`;
+        return `${indent}${plainTextFromInlines(block.inlines)}\n`;
       }
       if (block.type === "list") {
-        return `${block.items
+        const start = block.ordered ? block.start ?? 1 : 1;
+        const lines = block.items
           .map((item, idx) => {
-            const prefix = block.ordered ? `${idx + 1}. ` : "- ";
-            const content = item.blocks
-              .map((child) => {
-                if (child.type === "heading" || child.type === "paragraph") {
-                  return plainTextFromInlines(child.inlines);
-                }
-                if (child.type === "preformatted") {
-                  return child.text;
-                }
-                return renderPlainText([child]).trim();
-              })
-              .join(" ");
-            return `${prefix}${content}`.trim();
+            const prefix = block.ordered ? `${start + idx}. ` : "- ";
+            const [firstLine, ...restLines] = renderListItemPlain(item, `${indent}  `).split("\n");
+            const mainLine = `${indent}${prefix}${firstLine ?? ""}`.trimEnd();
+            const tail = restLines
+              .filter((line) => line.trim().length > 0)
+              .map((line) => `${indent}  ${line}`)
+              .join("\n");
+            return tail ? `${mainLine}\n${tail}` : mainLine;
           })
-          .join("\n")}\n`;
+          .join("\n");
+        return `${lines}\n`;
       }
       if (block.type === "blockquote") {
         return `${block.blocks
-          .map((child) => {
-            if (child.type === "heading" || child.type === "paragraph") {
-              return plainTextFromInlines(child.inlines)
-                .split("\n")
-                .map((line) => `> ${line}`)
-                .join("\n");
-            }
-            if (child.type === "preformatted") {
-              return child.text
-                .split("\n")
-                .map((line) => `> ${line}`)
-                .join("\n");
-            }
-            return renderPlainText([child]).trim();
-          })
+          .map((child) => renderPlainText([child], indent))
+          .join("")
+          .trim()
+          .split("\n")
+          .map((line) => `${indent}> ${line}`)
           .join("\n")}\n`;
       }
-      return `${block.text}\n`;
+      if (block.type === "table") {
+        return `${indent}${renderTablePlain(block).split("\n").join(`\n${indent}`)}\n`;
+      }
+      return `${indent}${block.text}\n`;
     })
     .join("\n");
+}
+
+function renderListItemPlain(item: ListItem, nestedIndent: string): string {
+  const parts: string[] = [];
+
+  for (const block of item.blocks) {
+    if (block.type === "paragraph" || block.type === "heading") {
+      parts.push(plainTextFromInlines(block.inlines));
+      continue;
+    }
+
+    if (block.type === "preformatted") {
+      parts.push(block.text);
+      continue;
+    }
+
+    if (block.type === "blockquote") {
+      const quote = block.blocks.map((inner) => renderBlockPlainOneLine(inner)).filter(Boolean).join(" ");
+      if (quote) {
+        parts.push(`> ${quote}`);
+      }
+      continue;
+    }
+
+    if (block.type === "table") {
+      parts.push(renderTablePlain(block));
+      continue;
+    }
+
+    const nested = renderPlainText([block], nestedIndent).trim();
+    if (nested) {
+      parts.push(nested);
+    }
+  }
+
+  return parts.join("\n");
+}
+
+function renderBlockPlainOneLine(block: BlockNode): string {
+  if (block.type === "paragraph" || block.type === "heading") {
+    return plainTextFromInlines(block.inlines).replace(/\n/g, " ").trim();
+  }
+  if (block.type === "preformatted") {
+    return block.text.replace(/\n/g, " ").trim();
+  }
+  if (block.type === "table") {
+    return renderTablePlain(block).replace(/\n/g, " ").trim();
+  }
+  return renderPlainText([block]).replace(/\n/g, " ").trim();
+}
+
+function renderTablePlain(table: TableBlock): string {
+  const header = table.headers.map((cell) => plainTextFromInlines(cell)).join("\t");
+  const rows = table.rows.map((row) => row.map((cell) => plainTextFromInlines(cell)).join("\t"));
+  return [header, ...rows].join("\n");
 }
 
 function escapeHtml(value: string): string {
@@ -125,4 +233,3 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
-
