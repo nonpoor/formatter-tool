@@ -1,46 +1,52 @@
 # HANDOFF
 
-## 当前状态（最新）
-- 日期：2026-04-03
-- 分支：`main`
-- 最近已推送提交：
-  1. `5b8484d` feat: improve parser robustness and polish formatter UI
-  2. `3f783c5` docs: add usage guide and public sharing instructions
+Related Docs:
+- [START_HERE.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/START_HERE.md)
+- [TASKS.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/TASKS.md)
+- [ARCHITECTURE.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/ARCHITECTURE.md)
 
-## 进行中的工作（未提交）
-当前工作区改动：
-1. `src/features/formatter/index.ts`
-2. `src/features/formatter/model/types.ts`
-3. `src/features/formatter/normalize/index.ts`
-4. `src/features/formatter/templates/index.ts`
-5. `tests/formatter/academic-structure.test.ts`
+## Current Objective
+把项目从“单线程上下文驱动”切换为“仓库内可长期维护的交接文档驱动”，让新 AI 线程 2-5 分钟接手。
 
-对应目标：学术结构化重构方案落地（目录友好版）。
+## What Was Completed
+- 学术结构模式已落地并合入主分支：
+  - 学术模板启用 `structureMode: academic`
+  - 标题编号映射 Heading 1-3
+  - 无序列表在学术模板内统一为有序列表
+  - Preview / Clipboard / Docx 共用统一模型
+- 粘贴策略增强：当 HTML 结构显著更完整时，默认模式可采用 HTML 投影纯文本。
+- UI 已完成一次收口（含复制反馈状态按钮）。
+- 基础上下文文档已建立（本次继续重构为三层体系）。
 
-## 已验证
-在当前会话内，学术重构改动已通过：
-1. `npm test -- --run`（32/32）
-2. `npm run lint`
-3. `npm run build`
+## Key Files
+- `src/features/formatter/normalize/index.ts`（学术规则核心）
+- `src/features/formatter/paste.ts`（粘贴输入优先策略）
+- `src/features/formatter/model/types.ts`（`structureMode` 类型）
+- `src/features/formatter/templates/index.ts`（模板与模式映射）
+- `tests/formatter/academic-structure.test.ts`（学术模式主回归）
+- `src/components/FormatterTool.tsx`（页面操作与状态反馈）
 
-## 下一步建议（执行顺序）
-1. 基于真实作业样本再补 2-3 个学术标题边界测试。
-2. 确认 academic 模式下不会误判正文短句为标题。
-3. 提交并推送学术重构改动。
-4. 更新 `DECISIONS.md` 与 `README` 的学术模式说明。
+## Important Context
+- 真实用户反馈显示：整段粘贴常可识别，但“只粘贴某段”更容易丢层级。
+- 当前策略优先稳健性和可交付性，不追求一次性覆盖所有语言/文体变体。
+- 项目仍是前端本地工具形态，尚未进入“模板上传 + AI Agent”阶段。
 
-## 新线程启动指令（复制即用）
-请在新线程第一条消息直接使用：
+## Key Decisions Made Recently
+- 继续坚持“学术结构优先”方向，停止纠结圆点保留。
+- `default` 保持兼容行为，学术模板才启用强规则，降低回归风险。
+- 不自动生成 Word 目录字段，只保证 heading 样式可用于 Word 一键目录。
 
-```text
-请先阅读以下文件并总结当前状态，再继续实现：
-1) docs/context/PROJECT_BRIEF.md
-2) docs/context/ARCHITECTURE.md
-3) docs/context/DECISIONS.md
-4) docs/context/ROADMAP.md
-5) docs/context/HANDOFF.md
-6) docs/context/UI_STYLE_GUIDE.md（如果本次任务涉及UI）
+## Outstanding Work
+- 用真实样本继续压测“单段粘贴”边界，减少误判与漏判。
+- 持续收敛 `normalize` 的标题识别阈值（短句误判风险）。
+- 完善发布/部署说明与对外使用路径（本地隧道、Vercel）。
 
-目标：继续推进“学术结构化重构（目录友好）”，不要做模板上传和AI Agent功能。
-先给出你将修改的文件与验证命令，然后再开始改代码。
-```
+## Risks / Caveats
+- `normalize/index.ts` 规则集中、耦合较高；改动容易牵一发动全身。
+- 学术标题识别是启发式规则，不是 NLP 语义理解，天然存在边界误差。
+- 当前 `.docx` 有序列表为显式编号前缀方案，不依赖 Word 多级编号样式。
+
+## Recommended Next Step
+1. 先看 [TASKS.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/TASKS.md) 的 `Now`。
+2. 先补测试，再改 `normalize`，最后跑 `lint + test + build`。
+3. 每次行为变化都更新 `DECISIONS.md` 与 `HANDOFF.md`。

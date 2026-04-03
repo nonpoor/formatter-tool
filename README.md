@@ -101,11 +101,13 @@ ngrok http 3000
 
 新线程开始前，先阅读：
 
-1. `docs/context/PROJECT_BRIEF.md`
-2. `docs/context/ARCHITECTURE.md`
-3. `docs/context/DECISIONS.md`
-4. `docs/context/ROADMAP.md`
-5. `docs/context/HANDOFF.md`
-6. `docs/context/UI_STYLE_GUIDE.md`（涉及 UI 时）
+1. `docs/context/START_HERE.md`
+2. `docs/context/HANDOFF.md`
+3. `docs/context/TASKS.md`
+4. `docs/context/ARCHITECTURE.md`
+5. `docs/context/DECISIONS.md`
+6. `docs/context/PROJECT_BRIEF.md`
+7. `docs/context/ROADMAP.md`
+8. `docs/context/UI_STYLE_GUIDE.md`（涉及 UI 时）
 
 这样可以在有限上下文下持续推进同一项目，不丢决策与进度。
