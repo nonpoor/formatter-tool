@@ -12,6 +12,7 @@ const defaultOptions: Required<NormalizeOptions> = {
   cleanupHeadingMarkers: true,
   aggressiveBlankLineCleanup: true,
   listRepair: true,
+  structureMode: "legacy",
 };
 
 type ListMarkerResult = {
@@ -25,20 +26,34 @@ const ORDERED_LIST_MARKER_REGEXES = [
   /^([0-9０-９]+)[.)）．、]\s*(.+)$/u,
   /^[\(（]([0-9０-９]+)[\)）]\s*(.+)$/u,
 ];
+const CN_NUMERIC_TOKEN = "[一二三四五六七八九十百千零〇两]+";
+const ACADEMIC_HEADING_PATTERNS: Array<{ level: 1 | 2 | 3; pattern: RegExp }> = [
+  { level: 3, pattern: /^([0-9０-９]+(?:\.[0-9０-９]+){2})\s+(.+)$/u },
+  { level: 2, pattern: /^([0-9０-９]+(?:\.[0-9０-９]+){1})\s+(.+)$/u },
+  { level: 2, pattern: new RegExp(`^[（(](${CN_NUMERIC_TOKEN})[）)]\\s*(.+)$`, "u") },
+  { level: 1, pattern: /^([0-9０-９]+)[、.．]\s*(.+)$/u },
+  { level: 1, pattern: new RegExp(`^(${CN_NUMERIC_TOKEN})、\\s*(.+)$`, "u") },
+];
 
 export function normalizeDocument(doc: DocumentModel, options: NormalizeOptions = {}): DocumentModel {
   const mergedOptions = { ...defaultOptions, ...options };
+  const minimumListItemsForRepair = mergedOptions.structureMode === "academic" ? 2 : 1;
+  const academicMode = mergedOptions.structureMode === "academic";
   const normalizedBlocks = normalizeBlocks(doc.blocks, mergedOptions);
-  const repairedBlocks = mergedOptions.listRepair ? repairLooseListBlocks(normalizedBlocks) : normalizedBlocks;
+  const repairedBlocks = mergedOptions.listRepair
+    ? repairLooseListBlocks(normalizedBlocks, minimumListItemsForRepair, academicMode)
+    : normalizedBlocks;
+  const structuredBlocks =
+    mergedOptions.structureMode === "academic" ? transformAcademicStructure(repairedBlocks) : repairedBlocks;
 
   return {
     ...doc,
-    blocks: repairedBlocks,
+    blocks: structuredBlocks,
     meta: {
       ...doc.meta,
       stats: {
-        blockCount: repairedBlocks.length,
-        charCount: charCountFromBlocks(repairedBlocks),
+        blockCount: structuredBlocks.length,
+        charCount: charCountFromBlocks(structuredBlocks),
       },
     },
   };
@@ -100,8 +115,12 @@ function normalizeBlocks(blocks: BlockNode[], options: Required<NormalizeOptions
       const items = block.items
         .map((item) => {
           const normalizedItemBlocks = normalizeBlocks(item.blocks, options);
+          const minimumListItemsForRepair = options.structureMode === "academic" ? 2 : 1;
+          const academicMode = options.structureMode === "academic";
           return {
-            blocks: options.listRepair ? repairLooseListBlocks(normalizedItemBlocks) : normalizedItemBlocks,
+            blocks: options.listRepair
+              ? repairLooseListBlocks(normalizedItemBlocks, minimumListItemsForRepair, academicMode)
+              : normalizedItemBlocks,
           };
         })
         .filter((item) => item.blocks.length > 0);
@@ -119,7 +138,11 @@ function normalizeBlocks(blocks: BlockNode[], options: Required<NormalizeOptions
 
     if (block.type === "blockquote") {
       const normalizedChildren = normalizeBlocks(block.blocks, options);
-      const repairedChildren = options.listRepair ? repairLooseListBlocks(normalizedChildren) : normalizedChildren;
+      const minimumListItemsForRepair = options.structureMode === "academic" ? 2 : 1;
+      const academicMode = options.structureMode === "academic";
+      const repairedChildren = options.listRepair
+        ? repairLooseListBlocks(normalizedChildren, minimumListItemsForRepair, academicMode)
+        : normalizedChildren;
       if (repairedChildren.length > 0) {
         result.push({
           type: "blockquote",
@@ -224,6 +247,178 @@ function clampHeadingLevel(level: number): 1 | 2 | 3 {
   return 3;
 }
 
+function transformAcademicStructure(blocks: BlockNode[], insideList = false): BlockNode[] {
+  const result: BlockNode[] = [];
+
+  for (const block of blocks) {
+    if (block.type === "paragraph") {
+      const splitBlocks = splitParagraphByAcademicMarkers(block);
+      if (splitBlocks) {
+        result.push(...transformAcademicStructure(splitBlocks, insideList));
+        continue;
+      }
+
+      const headingBlock = insideList ? null : tryConvertParagraphToAcademicHeading(block);
+      if (headingBlock) {
+        result.push(headingBlock);
+        continue;
+      }
+
+      result.push(block);
+      continue;
+    }
+
+    if (block.type === "list") {
+      const items = block.items
+        .map((item) => ({
+          blocks: transformAcademicStructure(item.blocks, true),
+        }))
+        .filter((item) => item.blocks.length > 0);
+
+      if (items.length === 0) {
+        continue;
+      }
+
+      result.push({
+        type: "list",
+        ordered: true,
+        start: block.ordered ? normalizeListStart(block.start) : 1,
+        items,
+      });
+      continue;
+    }
+
+    if (block.type === "blockquote") {
+      const transformed = transformAcademicStructure(block.blocks, insideList);
+      if (transformed.length > 0) {
+        result.push({
+          type: "blockquote",
+          blocks: transformed,
+        });
+      }
+      continue;
+    }
+
+    result.push(block);
+  }
+
+  return result;
+}
+
+function splitParagraphByAcademicMarkers(block: ParagraphBlock): BlockNode[] | null {
+  const text = plainTextFromInlines(block.inlines).replace(/\r\n/g, "\n");
+  if (!text.includes("\n")) {
+    return null;
+  }
+
+  const lines = text
+    .split("\n")
+    .map((line) => collapseSpaces(cleanTextValue(line)).trim())
+    .filter((line) => line.length > 0);
+
+  if (lines.length < 2) {
+    return null;
+  }
+
+  const splitBlocks: BlockNode[] = [];
+  let paragraphLines: string[] = [];
+  let cursor = 0;
+  let hasListGroup = false;
+
+  while (cursor < lines.length) {
+    const marker = parseListMarkerLine(lines[cursor]);
+    if (!marker) {
+      paragraphLines.push(lines[cursor]);
+      cursor += 1;
+      continue;
+    }
+
+    hasListGroup = true;
+    if (paragraphLines.length > 0) {
+      splitBlocks.push(createParagraphBlockFromLines(paragraphLines));
+      paragraphLines = [];
+    }
+
+    const markerGroup: ListMarkerResult[] = [marker];
+    const currentOrderedType = marker.ordered;
+    cursor += 1;
+
+    while (cursor < lines.length) {
+      const next = parseListMarkerLine(lines[cursor]);
+      if (!next || next.ordered !== currentOrderedType) {
+        break;
+      }
+      markerGroup.push(next);
+      cursor += 1;
+    }
+
+    splitBlocks.push(createAcademicListBlockFromMarkers(markerGroup));
+  }
+
+  if (paragraphLines.length > 0) {
+    splitBlocks.push(createParagraphBlockFromLines(paragraphLines));
+  }
+
+  return hasListGroup ? splitBlocks : null;
+}
+
+function createAcademicListBlockFromMarkers(markers: ListMarkerResult[]): BlockNode {
+  const first = markers[0];
+  const start = first?.ordered ? normalizeListStart(first.start) : 1;
+  return {
+    type: "list",
+    ordered: true,
+    start,
+    items: markers.map((marker) => ({
+      blocks: [
+        {
+          type: "paragraph",
+          inlines: createInlineFromTextWithBreak(marker.content),
+        } as ParagraphBlock,
+      ],
+    })),
+  };
+}
+
+function tryConvertParagraphToAcademicHeading(block: ParagraphBlock): BlockNode | null {
+  const text = collapseSpaces(cleanTextValue(plainTextFromInlines(block.inlines))).trim();
+  if (!text || text.includes("\n")) {
+    return null;
+  }
+
+  for (const { level, pattern } of ACADEMIC_HEADING_PATTERNS) {
+    const match = text.match(pattern);
+    if (!match?.[2]) {
+      continue;
+    }
+
+    const title = match[2].trim();
+    if (!isAcademicHeadingTitle(title)) {
+      continue;
+    }
+
+    return {
+      type: "heading",
+      level,
+      inlines: [{ type: "text", value: title }],
+    };
+  }
+
+  return null;
+}
+
+function isAcademicHeadingTitle(value: string): boolean {
+  if (value.length < 2 || value.length > 40) {
+    return false;
+  }
+
+  if (/[。！？；]/u.test(value)) {
+    return false;
+  }
+
+  return true;
+}
+
 function splitParagraphByLooseListMarkers(inlines: ParagraphBlock["inlines"]): BlockNode[] | null {
   if (inlines.some((inline) => inline.type === "text" && (inline.marks?.bold || inline.marks?.italic))) {
     return null;
@@ -313,7 +508,7 @@ function createListBlockFromMarkers(markers: ListMarkerResult[]): BlockNode {
   };
 }
 
-function repairLooseListBlocks(blocks: BlockNode[]): BlockNode[] {
+function repairLooseListBlocks(blocks: BlockNode[], minimumItems = 1, academicMode = false): BlockNode[] {
   const result: BlockNode[] = [];
   let index = 0;
 
@@ -326,7 +521,7 @@ function repairLooseListBlocks(blocks: BlockNode[]): BlockNode[] {
       continue;
     }
 
-    const currentMarkers = parseListMarkers(current);
+    const currentMarkers = parseListMarkers(current, academicMode);
     if (!currentMarkers || currentMarkers.length === 0) {
       result.push(current);
       index += 1;
@@ -341,7 +536,7 @@ function repairLooseListBlocks(blocks: BlockNode[]): BlockNode[] {
       if (candidate.type !== "paragraph") {
         break;
       }
-      const candidateMarkers = parseListMarkers(candidate);
+      const candidateMarkers = parseListMarkers(candidate, academicMode);
       if (!candidateMarkers || candidateMarkers.length === 0 || candidateMarkers[0].ordered !== ordered) {
         break;
       }
@@ -359,6 +554,12 @@ function repairLooseListBlocks(blocks: BlockNode[]): BlockNode[] {
       cursor += 1;
     }
 
+    if (items.length < minimumItems) {
+      result.push(current);
+      index += 1;
+      continue;
+    }
+
     result.push({
       type: "list",
       ordered,
@@ -371,7 +572,7 @@ function repairLooseListBlocks(blocks: BlockNode[]): BlockNode[] {
   return result;
 }
 
-function parseListMarkers(block: ParagraphBlock): ListMarkerResult[] | null {
+function parseListMarkers(block: ParagraphBlock, academicMode = false): ListMarkerResult[] | null {
   const text = plainTextFromInlines(block.inlines).replace(/\r\n/g, "\n");
   if (!text.trim()) {
     return null;
@@ -389,6 +590,9 @@ function parseListMarkers(block: ParagraphBlock): ListMarkerResult[] | null {
   let orderedType: boolean | null = null;
 
   for (const line of lines) {
+    if (academicMode && looksLikeAcademicDecimalHeadingLine(line)) {
+      return null;
+    }
     const marker = parseListMarkerLine(line);
     if (!marker) {
       return null;
@@ -404,6 +608,10 @@ function parseListMarkers(block: ParagraphBlock): ListMarkerResult[] | null {
   }
 
   return markers;
+}
+
+function looksLikeAcademicDecimalHeadingLine(line: string): boolean {
+  return /^([0-9０-９]+(?:\.[0-9０-９]+){1,2})\s+\S/u.test(line);
 }
 
 function parseListMarkerLine(line: string): ListMarkerResult | null {

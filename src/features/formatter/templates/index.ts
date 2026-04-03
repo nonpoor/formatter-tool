@@ -1,4 +1,4 @@
-import type { TemplateId } from "@/features/formatter/model/types";
+import type { StructureMode, TemplateId } from "@/features/formatter/model/types";
 
 export interface TemplateConfig {
   id: TemplateId;
@@ -6,6 +6,7 @@ export interface TemplateConfig {
   paragraphSpacingAfter: number;
   headingSpacingAfter: number;
   fontSize: number;
+  structureMode: StructureMode;
 }
 
 export const templateConfigs: Record<TemplateId, TemplateConfig> = {
@@ -15,6 +16,7 @@ export const templateConfigs: Record<TemplateId, TemplateConfig> = {
     paragraphSpacingAfter: 180,
     headingSpacingAfter: 220,
     fontSize: 24,
+    structureMode: "legacy",
   },
   "experiment-report": {
     id: "experiment-report",
@@ -22,6 +24,7 @@ export const templateConfigs: Record<TemplateId, TemplateConfig> = {
     paragraphSpacingAfter: 220,
     headingSpacingAfter: 260,
     fontSize: 24,
+    structureMode: "academic",
   },
   "course-paper": {
     id: "course-paper",
@@ -29,6 +32,7 @@ export const templateConfigs: Record<TemplateId, TemplateConfig> = {
     paragraphSpacingAfter: 200,
     headingSpacingAfter: 240,
     fontSize: 24,
+    structureMode: "academic",
   },
   "general-homework": {
     id: "general-homework",
@@ -36,6 +40,7 @@ export const templateConfigs: Record<TemplateId, TemplateConfig> = {
     paragraphSpacingAfter: 160,
     headingSpacingAfter: 200,
     fontSize: 24,
+    structureMode: "academic",
   },
 };
 

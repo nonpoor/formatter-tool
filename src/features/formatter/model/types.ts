@@ -1,4 +1,5 @@
 export type SourceType = "markdown" | "html" | "plain" | "mixed";
+export type StructureMode = "legacy" | "academic";
 
 export type TemplateId = "default" | "experiment-report" | "course-paper" | "general-homework";
 
@@ -77,6 +78,7 @@ export interface NormalizeOptions {
   cleanupHeadingMarkers?: boolean;
   aggressiveBlankLineCleanup?: boolean;
   listRepair?: boolean;
+  structureMode?: StructureMode;
 }
 
 export interface FormatOptions extends NormalizeOptions {

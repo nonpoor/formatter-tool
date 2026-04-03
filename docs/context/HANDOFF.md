@@ -39,6 +39,7 @@
 3) docs/context/DECISIONS.md
 4) docs/context/ROADMAP.md
 5) docs/context/HANDOFF.md
+6) docs/context/UI_STYLE_GUIDE.md（如果本次任务涉及UI）
 
 目标：继续推进“学术结构化重构（目录友好）”，不要做模板上传和AI Agent功能。
 先给出你将修改的文件与验证命令，然后再开始改代码。
