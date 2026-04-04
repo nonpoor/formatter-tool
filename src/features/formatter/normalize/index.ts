@@ -1,4 +1,14 @@
-import type { BlockNode, DocumentModel, InlineNode, NormalizeOptions, ParagraphBlock } from "@/features/formatter/model/types";
+import type {
+  BlockNode,
+  DocumentModel,
+  HeadingNumberingPolicy,
+  ItemExpressionPolicy,
+  InlineNode,
+  NormalizeOptions,
+  ParagraphBlock,
+} from "@/features/formatter/model/types";
+import { defaultModeId, getModePolicy, normalizeDefaults } from "@/features/formatter/config/policies";
+import { transformTextPreservingMath } from "@/features/formatter/math/preservation";
 import {
   charCountFromBlocks,
   cleanTextValue,
@@ -8,11 +18,13 @@ import {
   pushTextInline,
 } from "@/features/formatter/utils";
 
-const defaultOptions: Required<NormalizeOptions> = {
-  cleanupHeadingMarkers: true,
-  aggressiveBlankLineCleanup: true,
-  listRepair: true,
-  structureMode: "legacy",
+type ResolvedNormalizeOptions = {
+  cleanupHeadingMarkers: boolean;
+  aggressiveBlankLineCleanup: boolean;
+  listRepair: boolean;
+  modeId: "general" | "academic";
+  headingNumbering: HeadingNumberingPolicy;
+  itemExpressionPolicy: ItemExpressionPolicy;
 };
 
 type ListMarkerResult = {
@@ -27,7 +39,7 @@ const ORDERED_LIST_MARKER_REGEXES = [
   /^[\(（]([0-9０-９]+)[\)）]\s*(.+)$/u,
 ];
 const CN_NUMERIC_TOKEN = "[一二三四五六七八九十百千零〇两]+";
-const ACADEMIC_HEADING_PATTERNS: Array<{ level: 1 | 2 | 3; pattern: RegExp }> = [
+const HEADING_PATTERNS: Array<{ level: 1 | 2 | 3; pattern: RegExp }> = [
   { level: 3, pattern: /^([0-9０-９]+(?:\.[0-9０-９]+){2})\s+(.+)$/u },
   { level: 2, pattern: /^([0-9０-９]+(?:\.[0-9０-９]+){1})\s+(.+)$/u },
   { level: 2, pattern: new RegExp(`^[（(](${CN_NUMERIC_TOKEN})[）)]\\s*(.+)$`, "u") },
@@ -35,22 +47,30 @@ const ACADEMIC_HEADING_PATTERNS: Array<{ level: 1 | 2 | 3; pattern: RegExp }> = 
   { level: 1, pattern: new RegExp(`^(${CN_NUMERIC_TOKEN})、\\s*(.+)$`, "u") },
 ];
 
+const EXPLICIT_STEP_REGEX = /(步骤|流程|实验步骤|实验过程|方法步骤|操作步骤)/u;
+const SEQUENCE_PREFIX_REGEX = /^(首先|第一步|第[一二三四五六七八九十]+步|其次|然后|接着|随后|最后|最终|接下来)/u;
+
 export function normalizeDocument(doc: DocumentModel, options: NormalizeOptions = {}): DocumentModel {
-  const mergedOptions = { ...defaultOptions, ...options };
-  const minimumListItemsForRepair = mergedOptions.structureMode === "academic" ? 2 : 1;
-  const academicMode = mergedOptions.structureMode === "academic";
+  const modeId = options.modeId ?? doc.meta.modeId ?? defaultModeId;
+  const modePolicy = getModePolicy(modeId);
+  const mergedOptions: ResolvedNormalizeOptions = {
+    ...normalizeDefaults,
+    ...options,
+    modeId,
+    headingNumbering: options.headingNumbering ?? modePolicy.headingNumbering,
+    itemExpressionPolicy: options.itemExpressionPolicy ?? modePolicy.itemExpressionPolicy,
+  };
+
   const normalizedBlocks = normalizeBlocks(doc.blocks, mergedOptions);
-  const repairedBlocks = mergedOptions.listRepair
-    ? repairLooseListBlocks(normalizedBlocks, minimumListItemsForRepair, academicMode)
-    : normalizedBlocks;
-  const structuredBlocks =
-    mergedOptions.structureMode === "academic" ? transformAcademicStructure(repairedBlocks) : repairedBlocks;
+  const repairedBlocks = mergedOptions.listRepair ? repairLooseListBlocks(normalizedBlocks) : normalizedBlocks;
+  const structuredBlocks = transformStructuredBlocks(repairedBlocks, mergedOptions);
 
   return {
     ...doc,
     blocks: structuredBlocks,
     meta: {
       ...doc.meta,
+      modeId,
       stats: {
         blockCount: structuredBlocks.length,
         charCount: charCountFromBlocks(structuredBlocks),
@@ -59,7 +79,7 @@ export function normalizeDocument(doc: DocumentModel, options: NormalizeOptions 
   };
 }
 
-function normalizeBlocks(blocks: BlockNode[], options: Required<NormalizeOptions>): BlockNode[] {
+function normalizeBlocks(blocks: BlockNode[], options: ResolvedNormalizeOptions): BlockNode[] {
   const result: BlockNode[] = [];
 
   for (const block of blocks) {
@@ -83,9 +103,7 @@ function normalizeBlocks(blocks: BlockNode[], options: Required<NormalizeOptions
         continue;
       }
 
-      const headingMatch = options.cleanupHeadingMarkers
-        ? paragraphText.match(/^(#{1,3})\s+(.+)$/)
-        : null;
+      const headingMatch = options.cleanupHeadingMarkers ? paragraphText.match(/^(#{1,3})\s+(.+)$/) : null;
 
       if (headingMatch) {
         result.push({
@@ -115,12 +133,8 @@ function normalizeBlocks(blocks: BlockNode[], options: Required<NormalizeOptions
       const items = block.items
         .map((item) => {
           const normalizedItemBlocks = normalizeBlocks(item.blocks, options);
-          const minimumListItemsForRepair = options.structureMode === "academic" ? 2 : 1;
-          const academicMode = options.structureMode === "academic";
           return {
-            blocks: options.listRepair
-              ? repairLooseListBlocks(normalizedItemBlocks, minimumListItemsForRepair, academicMode)
-              : normalizedItemBlocks,
+            blocks: options.listRepair ? repairLooseListBlocks(normalizedItemBlocks) : normalizedItemBlocks,
           };
         })
         .filter((item) => item.blocks.length > 0);
@@ -138,11 +152,7 @@ function normalizeBlocks(blocks: BlockNode[], options: Required<NormalizeOptions
 
     if (block.type === "blockquote") {
       const normalizedChildren = normalizeBlocks(block.blocks, options);
-      const minimumListItemsForRepair = options.structureMode === "academic" ? 2 : 1;
-      const academicMode = options.structureMode === "academic";
-      const repairedChildren = options.listRepair
-        ? repairLooseListBlocks(normalizedChildren, minimumListItemsForRepair, academicMode)
-        : normalizedChildren;
+      const repairedChildren = options.listRepair ? repairLooseListBlocks(normalizedChildren) : normalizedChildren;
       if (repairedChildren.length > 0) {
         result.push({
           type: "blockquote",
@@ -203,7 +213,7 @@ function normalizeText(input: string): string {
   const normalized = cleanTextValue(input)
     .replace(/\r\n/g, "\n")
     .split("\n")
-    .map((line) => collapseSpaces(line).trim())
+    .map((line) => normalizeCollapsedText(line).trim())
     .join("\n");
   return normalized.trim();
 }
@@ -220,7 +230,7 @@ function normalizeParagraphInlines(inlines: InlineNode[]): ParagraphBlock["inlin
       continue;
     }
 
-    const cleaned = collapseSpaces(cleanTextValue(inline.value));
+    const cleaned = normalizeCollapsedText(inline.value);
     if (!cleaned) {
       continue;
     }
@@ -247,31 +257,36 @@ function clampHeadingLevel(level: number): 1 | 2 | 3 {
   return 3;
 }
 
-function transformAcademicStructure(blocks: BlockNode[], insideList = false): BlockNode[] {
+function transformStructuredBlocks(blocks: BlockNode[], options: ResolvedNormalizeOptions, insideList = false): BlockNode[] {
   const result: BlockNode[] = [];
+  let previousHint: string | null = null;
 
   for (const block of blocks) {
     if (block.type === "paragraph") {
-      const splitBlocks = splitParagraphByAcademicMarkers(block);
+      const splitBlocks = splitParagraphByStructuredMarkers(block, options, previousHint);
       if (splitBlocks) {
-        result.push(...transformAcademicStructure(splitBlocks, insideList));
+        const transformedSplit = transformStructuredBlocks(splitBlocks, options, insideList);
+        result.push(...transformedSplit);
+        previousHint = lastHintFromBlocks(transformedSplit) ?? previousHint;
         continue;
       }
 
-      const headingBlock = insideList ? null : tryConvertParagraphToAcademicHeading(block);
+      const headingBlock = insideList ? null : tryConvertParagraphToHeading(block, options.headingNumbering);
       if (headingBlock) {
         result.push(headingBlock);
+        previousHint = plainTextFromInlines(headingBlock.inlines);
         continue;
       }
 
       result.push(block);
+      previousHint = plainTextFromInlines(block.inlines);
       continue;
     }
 
     if (block.type === "list") {
       const items = block.items
         .map((item) => ({
-          blocks: transformAcademicStructure(item.blocks, true),
+          blocks: transformStructuredBlocks(item.blocks, options, true),
         }))
         .filter((item) => item.blocks.length > 0);
 
@@ -279,33 +294,55 @@ function transformAcademicStructure(blocks: BlockNode[], insideList = false): Bl
         continue;
       }
 
-      result.push({
+      const nextList: BlockNode = {
         type: "list",
-        ordered: true,
-        start: block.ordered ? normalizeListStart(block.start) : 1,
+        ordered: block.ordered,
+        start: block.ordered ? normalizeListStart(block.start) : undefined,
         items,
-      });
+      };
+
+      const shouldConvert =
+        nextList.type === "list" &&
+        !nextList.ordered &&
+        shouldConvertUnorderedList(nextList, previousHint, options.itemExpressionPolicy);
+
+      if (!shouldConvert && options.modeId === "academic" && !nextList.ordered) {
+        const normalizedItemBlocks = normalizeAcademicListExpression(nextList);
+        result.push(...normalizedItemBlocks);
+        previousHint = lastHintFromBlocks(normalizedItemBlocks) ?? previousHint;
+        continue;
+      }
+
+      const finalList = shouldConvert ? toOrderedList(nextList) : nextList;
+      result.push(finalList);
+      previousHint = listSummaryHint(finalList);
       continue;
     }
 
     if (block.type === "blockquote") {
-      const transformed = transformAcademicStructure(block.blocks, insideList);
+      const transformed = transformStructuredBlocks(block.blocks, options, insideList);
       if (transformed.length > 0) {
         result.push({
           type: "blockquote",
           blocks: transformed,
         });
+        previousHint = lastHintFromBlocks(transformed) ?? previousHint;
       }
       continue;
     }
 
     result.push(block);
+    previousHint = null;
   }
 
   return result;
 }
 
-function splitParagraphByAcademicMarkers(block: ParagraphBlock): BlockNode[] | null {
+function splitParagraphByStructuredMarkers(
+  block: ParagraphBlock,
+  options: ResolvedNormalizeOptions,
+  previousHint: string | null,
+): BlockNode[] | null {
   const text = plainTextFromInlines(block.inlines).replace(/\r\n/g, "\n");
   if (!text.includes("\n")) {
     return null;
@@ -313,7 +350,7 @@ function splitParagraphByAcademicMarkers(block: ParagraphBlock): BlockNode[] | n
 
   const lines = text
     .split("\n")
-    .map((line) => collapseSpaces(cleanTextValue(line)).trim())
+    .map((line) => normalizeCollapsedText(line).trim())
     .filter((line) => line.length > 0);
 
   if (lines.length < 2) {
@@ -336,7 +373,6 @@ function splitParagraphByAcademicMarkers(block: ParagraphBlock): BlockNode[] | n
     hasListGroup = true;
     if (paragraphLines.length > 0) {
       splitBlocks.push(createParagraphBlockFromLines(paragraphLines));
-      paragraphLines = [];
     }
 
     const markerGroup: ListMarkerResult[] = [marker];
@@ -352,7 +388,24 @@ function splitParagraphByAcademicMarkers(block: ParagraphBlock): BlockNode[] | n
       cursor += 1;
     }
 
-    splitBlocks.push(createAcademicListBlockFromMarkers(markerGroup));
+    let nextList = createListBlockFromMarkers(markerGroup);
+    if (
+      !nextList.ordered &&
+      shouldConvertUnorderedList(
+        nextList,
+        paragraphLines[paragraphLines.length - 1] ?? previousHint,
+        options.itemExpressionPolicy,
+      )
+    ) {
+      nextList = toOrderedList(nextList);
+    }
+
+    if (!nextList.ordered && options.modeId === "academic") {
+      splitBlocks.push(...normalizeAcademicListExpression(nextList));
+    } else {
+      splitBlocks.push(nextList);
+    }
+    paragraphLines = [];
   }
 
   if (paragraphLines.length > 0) {
@@ -362,52 +415,37 @@ function splitParagraphByAcademicMarkers(block: ParagraphBlock): BlockNode[] | n
   return hasListGroup ? splitBlocks : null;
 }
 
-function createAcademicListBlockFromMarkers(markers: ListMarkerResult[]): BlockNode {
-  const first = markers[0];
-  const start = first?.ordered ? normalizeListStart(first.start) : 1;
-  return {
-    type: "list",
-    ordered: true,
-    start,
-    items: markers.map((marker) => ({
-      blocks: [
-        {
-          type: "paragraph",
-          inlines: createInlineFromTextWithBreak(marker.content),
-        } as ParagraphBlock,
-      ],
-    })),
-  };
-}
-
-function tryConvertParagraphToAcademicHeading(block: ParagraphBlock): BlockNode | null {
-  const text = collapseSpaces(cleanTextValue(plainTextFromInlines(block.inlines))).trim();
+function tryConvertParagraphToHeading(
+  block: ParagraphBlock,
+  headingNumbering: HeadingNumberingPolicy,
+): Extract<BlockNode, { type: "heading" }> | null {
+  const text = normalizeCollapsedText(plainTextFromInlines(block.inlines)).trim();
   if (!text || text.includes("\n")) {
     return null;
   }
 
-  for (const { level, pattern } of ACADEMIC_HEADING_PATTERNS) {
+  for (const { level, pattern } of HEADING_PATTERNS) {
     const match = text.match(pattern);
     if (!match?.[2]) {
       continue;
     }
 
     const title = match[2].trim();
-    if (!isAcademicHeadingTitle(title)) {
+    if (!isHeadingTitle(title)) {
       continue;
     }
 
     return {
       type: "heading",
       level,
-      inlines: [{ type: "text", value: title }],
+      inlines: [{ type: "text", value: headingNumbering === "preserve" ? text : title }],
     };
   }
 
   return null;
 }
 
-function isAcademicHeadingTitle(value: string): boolean {
+function isHeadingTitle(value: string): boolean {
   if (value.length < 2 || value.length > 40) {
     return false;
   }
@@ -431,7 +469,7 @@ function splitParagraphByLooseListMarkers(inlines: ParagraphBlock["inlines"]): B
 
   const lines = text
     .split("\n")
-    .map((line) => collapseSpaces(cleanTextValue(line)).trim())
+    .map((line) => normalizeCollapsedText(line).trim())
     .filter((line) => line.length > 0);
 
   if (lines.length < 2) {
@@ -491,7 +529,7 @@ function createParagraphBlockFromLines(lines: string[]): ParagraphBlock {
   };
 }
 
-function createListBlockFromMarkers(markers: ListMarkerResult[]): BlockNode {
+function createListBlockFromMarkers(markers: ListMarkerResult[]): Extract<BlockNode, { type: "list" }> {
   const ordered = markers[0]?.ordered ?? false;
   return {
     type: "list",
@@ -508,7 +546,7 @@ function createListBlockFromMarkers(markers: ListMarkerResult[]): BlockNode {
   };
 }
 
-function repairLooseListBlocks(blocks: BlockNode[], minimumItems = 1, academicMode = false): BlockNode[] {
+function repairLooseListBlocks(blocks: BlockNode[], minimumItems = 1): BlockNode[] {
   const result: BlockNode[] = [];
   let index = 0;
 
@@ -521,7 +559,7 @@ function repairLooseListBlocks(blocks: BlockNode[], minimumItems = 1, academicMo
       continue;
     }
 
-    const currentMarkers = parseListMarkers(current, academicMode);
+    const currentMarkers = parseListMarkers(current);
     if (!currentMarkers || currentMarkers.length === 0) {
       result.push(current);
       index += 1;
@@ -536,7 +574,7 @@ function repairLooseListBlocks(blocks: BlockNode[], minimumItems = 1, academicMo
       if (candidate.type !== "paragraph") {
         break;
       }
-      const candidateMarkers = parseListMarkers(candidate, academicMode);
+      const candidateMarkers = parseListMarkers(candidate);
       if (!candidateMarkers || candidateMarkers.length === 0 || candidateMarkers[0].ordered !== ordered) {
         break;
       }
@@ -572,7 +610,7 @@ function repairLooseListBlocks(blocks: BlockNode[], minimumItems = 1, academicMo
   return result;
 }
 
-function parseListMarkers(block: ParagraphBlock, academicMode = false): ListMarkerResult[] | null {
+function parseListMarkers(block: ParagraphBlock): ListMarkerResult[] | null {
   const text = plainTextFromInlines(block.inlines).replace(/\r\n/g, "\n");
   if (!text.trim()) {
     return null;
@@ -590,9 +628,10 @@ function parseListMarkers(block: ParagraphBlock, academicMode = false): ListMark
   let orderedType: boolean | null = null;
 
   for (const line of lines) {
-    if (academicMode && looksLikeAcademicDecimalHeadingLine(line)) {
+    if (looksLikeDecimalHeadingLine(line)) {
       return null;
     }
+
     const marker = parseListMarkerLine(line);
     if (!marker) {
       return null;
@@ -610,12 +649,12 @@ function parseListMarkers(block: ParagraphBlock, academicMode = false): ListMark
   return markers;
 }
 
-function looksLikeAcademicDecimalHeadingLine(line: string): boolean {
+function looksLikeDecimalHeadingLine(line: string): boolean {
   return /^([0-9０-９]+(?:\.[0-9０-９]+){1,2})\s+\S/u.test(line);
 }
 
 function parseListMarkerLine(line: string): ListMarkerResult | null {
-  const text = collapseSpaces(cleanTextValue(line)).trim();
+  const text = normalizeCollapsedText(line).trim();
   if (!text) {
     return null;
   }
@@ -645,6 +684,311 @@ function parseListMarkerLine(line: string): ListMarkerResult | null {
   return null;
 }
 
+function shouldConvertUnorderedList(
+  block: Extract<BlockNode, { type: "list" }>,
+  contextHint: string | null,
+  policy: ItemExpressionPolicy,
+): boolean {
+  const itemTexts = block.items
+    .map((item) => listItemPrimaryText(item.blocks))
+    .filter((text): text is string => Boolean(text));
+
+  const contextMatched = hasExplicitStepCue(contextHint);
+  const explicitCueCount = itemTexts.filter((text) => hasExplicitStepCue(text)).length;
+  const groupedExplicitCue = explicitCueCount >= Math.max(2, Math.ceil(itemTexts.length / 2));
+  if (contextMatched || groupedExplicitCue) {
+    return true;
+  }
+
+  if (policy === "explicit_step_only") {
+    return false;
+  }
+
+  return hasSequenceCue(itemTexts);
+}
+
+function shouldNormalizeExplanatoryList(block: Extract<BlockNode, { type: "list" }>): boolean {
+  if (block.ordered || block.items.length < 2) {
+    return false;
+  }
+
+  const analyses = block.items.map((item) => analyzeNarrativeItem(item.blocks));
+  if (analyses.some((item) => item === null)) {
+    return false;
+  }
+
+  const records = analyses.filter((item): item is NarrativeItemAnalysis => item !== null);
+  if (records.length < 2) {
+    return false;
+  }
+
+  const explanatoryCount = records.filter((item) => item.explanatory).length;
+  if (explanatoryCount < 2 || explanatoryCount < Math.ceil(records.length * 0.6)) {
+    return false;
+  }
+
+  const withDelimiter = records.filter((item) => item.hasKeywordDelimiter).length;
+  const withBoldPrefix = records.filter((item) => item.hasLeadingBoldKeyword).length;
+  if (withDelimiter < 2 && withBoldPrefix < 2) {
+    return false;
+  }
+
+  const checklistLikeCount = records.filter((item) => item.checklistLike).length;
+  if (checklistLikeCount >= records.length - 1) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * 学术模式下的主动取舍：
+ * - 非步骤型无序列表默认去符号外观，转为分项正文段落。
+ * - 对嵌套脏输入，当前 MVP 可优先保证可读性与分段清晰，允许扁平化而不强求完整层级保真。
+ */
+function normalizeAcademicListExpression(block: Extract<BlockNode, { type: "list" }>): BlockNode[] {
+  const explanatory = shouldNormalizeExplanatoryList(block);
+
+  return block.items.flatMap((item) => {
+    if (explanatory) {
+      const narrative = toNarrativeParagraph(item.blocks);
+      if (narrative) {
+        return [narrative];
+      }
+    }
+
+    return flattenItemBlocksToParagraphs(item.blocks);
+  });
+}
+
+function hasExplicitStepCue(text: string | null | undefined): boolean {
+  if (!text) {
+    return false;
+  }
+  return EXPLICIT_STEP_REGEX.test(text);
+}
+
+function hasSequenceCue(itemTexts: string[]): boolean {
+  if (itemTexts.length < 2) {
+    return false;
+  }
+
+  const matched = itemTexts.filter((text) => SEQUENCE_PREFIX_REGEX.test(text)).length;
+  return matched >= 2 && matched >= Math.ceil(itemTexts.length / 2);
+}
+
+function listItemPrimaryText(blocks: BlockNode[]): string | null {
+  const firstParagraph = blocks.find((block) => block.type === "paragraph" || block.type === "heading");
+  if (firstParagraph && (firstParagraph.type === "paragraph" || firstParagraph.type === "heading")) {
+    return plainTextFromInlines(firstParagraph.inlines).trim();
+  }
+
+  return null;
+}
+
+type NarrativeItemAnalysis = {
+  explanatory: boolean;
+  checklistLike: boolean;
+  hasKeywordDelimiter: boolean;
+  hasLeadingBoldKeyword: boolean;
+};
+
+function analyzeNarrativeItem(blocks: BlockNode[]): NarrativeItemAnalysis | null {
+  const sourceBlock = extractSingleNarrativeSource(blocks);
+  if (!sourceBlock) {
+    return null;
+  }
+
+  const text = plainTextFromInlines(sourceBlock.inlines).trim();
+  if (!text) {
+    return null;
+  }
+
+  const split = splitKeywordAndExplanation(text);
+  const hasKeywordDelimiter = Boolean(split);
+  const hasLeadingBoldKeyword = hasLeadingBoldSegment(sourceBlock.inlines);
+  const explanationText = split?.explanation ?? text;
+  const explanationLike = looksLikeExplanation(explanationText);
+  const checklistLike = looksLikeChecklistText(text);
+
+  const explanatory =
+    (hasKeywordDelimiter && split !== null && looksLikeShortKeyword(split.keyword) && explanationLike) ||
+    (hasLeadingBoldKeyword && /[：:]/u.test(text) && explanationLike);
+
+  return {
+    explanatory,
+    checklistLike,
+    hasKeywordDelimiter,
+    hasLeadingBoldKeyword,
+  };
+}
+
+function toNarrativeParagraph(blocks: BlockNode[]): ParagraphBlock | null {
+  const sourceBlock = extractSingleNarrativeSource(blocks);
+  if (!sourceBlock) {
+    return null;
+  }
+
+  return {
+    type: "paragraph",
+    inlines: sourceBlock.inlines,
+  };
+}
+
+function flattenItemBlocksToParagraphs(blocks: BlockNode[]): ParagraphBlock[] {
+  const paragraphs: ParagraphBlock[] = [];
+
+  for (const block of blocks) {
+    if (block.type === "paragraph" || block.type === "heading") {
+      const text = plainTextFromInlines(block.inlines).trim();
+      if (!text) {
+        continue;
+      }
+      paragraphs.push({
+        type: "paragraph",
+        inlines: block.inlines,
+      });
+      continue;
+    }
+
+    if (block.type === "preformatted") {
+      const lines = block.text
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      for (const line of lines) {
+        paragraphs.push({
+          type: "paragraph",
+          inlines: createInlineFromTextWithBreak(line),
+        });
+      }
+      continue;
+    }
+
+    if (block.type === "blockquote") {
+      paragraphs.push(...flattenItemBlocksToParagraphs(block.blocks));
+      continue;
+    }
+
+    if (block.type === "list") {
+      for (const item of block.items) {
+        paragraphs.push(...flattenItemBlocksToParagraphs(item.blocks));
+      }
+      continue;
+    }
+
+    if (block.type === "table") {
+      const headerText = block.headers.map((cell) => plainTextFromInlines(cell).trim()).join(" ");
+      if (headerText) {
+        paragraphs.push({
+          type: "paragraph",
+          inlines: createInlineFromTextWithBreak(headerText),
+        });
+      }
+      for (const row of block.rows) {
+        const rowText = row.map((cell) => plainTextFromInlines(cell).trim()).join(" ");
+        if (!rowText) {
+          continue;
+        }
+        paragraphs.push({
+          type: "paragraph",
+          inlines: createInlineFromTextWithBreak(rowText),
+        });
+      }
+    }
+  }
+
+  return paragraphs;
+}
+
+function extractSingleNarrativeSource(blocks: BlockNode[]): Extract<BlockNode, { type: "paragraph" | "heading" }> | null {
+  if (blocks.length !== 1) {
+    return null;
+  }
+
+  const first = blocks[0];
+  if (first.type === "paragraph" || first.type === "heading") {
+    return first;
+  }
+  return null;
+}
+
+function splitKeywordAndExplanation(text: string): { keyword: string; explanation: string } | null {
+  const match = text.match(/^([^：:]{1,24})[：:]\s*(.+)$/u);
+  if (!match?.[1] || !match[2]) {
+    return null;
+  }
+
+  return {
+    keyword: match[1].trim(),
+    explanation: match[2].trim(),
+  };
+}
+
+function looksLikeShortKeyword(text: string): boolean {
+  if (text.length < 2 || text.length > 20) {
+    return false;
+  }
+  return !/[。！？；]/u.test(text);
+}
+
+function looksLikeExplanation(text: string): boolean {
+  if (text.length >= 14) {
+    return true;
+  }
+  return /[，。；]/u.test(text);
+}
+
+function looksLikeChecklistText(text: string): boolean {
+  if (text.length > 12) {
+    return false;
+  }
+  return !/[：:，。；]/u.test(text);
+}
+
+function hasLeadingBoldSegment(inlines: InlineNode[]): boolean {
+  for (const inline of inlines) {
+    if (inline.type !== "text") {
+      continue;
+    }
+    const cleaned = inline.value.trim();
+    if (!cleaned) {
+      continue;
+    }
+    return Boolean(inline.marks?.bold);
+  }
+  return false;
+}
+
+function toOrderedList(block: Extract<BlockNode, { type: "list" }>): Extract<BlockNode, { type: "list" }> {
+  return {
+    ...block,
+    ordered: true,
+    start: block.ordered ? normalizeListStart(block.start) : 1,
+  };
+}
+
+function listSummaryHint(block: Extract<BlockNode, { type: "list" }>): string | null {
+  const firstItem = block.items[0];
+  if (!firstItem) {
+    return null;
+  }
+  return listItemPrimaryText(firstItem.blocks);
+}
+
+function lastHintFromBlocks(blocks: BlockNode[]): string | null {
+  for (let index = blocks.length - 1; index >= 0; index -= 1) {
+    const block = blocks[index];
+    if (block.type === "paragraph" || block.type === "heading") {
+      return plainTextFromInlines(block.inlines);
+    }
+    if (block.type === "list") {
+      return listSummaryHint(block);
+    }
+  }
+  return null;
+}
+
 function parsePositiveInteger(value: string): number {
   const normalized = value.replace(/[０-９]/g, (digit) => String.fromCharCode(digit.charCodeAt(0) - 0xfee0));
   const parsed = Number.parseInt(normalized, 10);
@@ -667,4 +1011,8 @@ function normalizeRowWidth(row: InlineNode[][], width: number): InlineNode[][] {
     normalized.push([]);
   }
   return normalized.slice(0, width);
+}
+
+function normalizeCollapsedText(value: string): string {
+  return transformTextPreservingMath(cleanTextValue(value), (maskedText) => collapseSpaces(maskedText));
 }

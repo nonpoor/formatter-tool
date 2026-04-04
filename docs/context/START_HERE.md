@@ -9,7 +9,7 @@
 
 ## Current Status
 - 当前阶段：MVP 后期收口（稳定性与交接体系完善）。
-- 已完成：学术结构模式（academic）已接入主流程，预览/复制/docx 共用同一 `DocumentModel`。
+- 已完成：双模式（`general | academic`）已接入主流程，预览/复制/docx 共用同一 `DocumentModel`。
 - 当前不做：模板上传、AI 自动写作 Agent、后端服务化。
 
 ## Current Top Priority
@@ -18,18 +18,21 @@
 3. 控制需求边界，不提前扩展到“模板上传/AI Agent”。
 
 ## Read In This Order
-1. [HANDOFF.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/HANDOFF.md)
-2. [TASKS.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/TASKS.md)
-3. [WORKFLOW.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/WORKFLOW.md)
-4. [ARCHITECTURE.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/ARCHITECTURE.md)
-5. [DECISIONS.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/DECISIONS.md)
-6. [PROJECT_BRIEF.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/PROJECT_BRIEF.md)
-7. [UI_STYLE_GUIDE.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/UI_STYLE_GUIDE.md)（仅 UI 任务）
-8. 核心代码目录：`src/features/formatter/`
+1. [PRODUCT_PHASES.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/PRODUCT_PHASES.md)（新线程先对齐愿景与阶段边界）
+2. [HANDOFF.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/HANDOFF.md)
+3. [TASKS.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/TASKS.md)
+4. [WORKFLOW.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/WORKFLOW.md)
+5. [ARCHITECTURE.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/ARCHITECTURE.md)
+6. [DECISIONS.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/DECISIONS.md)
+7. [PROJECT_BRIEF.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/PROJECT_BRIEF.md)
+8. [UI_STYLE_GUIDE.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/UI_STYLE_GUIDE.md)（仅 UI 任务）
+9. 核心代码目录：`src/features/formatter/`
 
 ## Important Constraints
-- `default` 模板使用 `legacy`；仅 `experiment-report`/`course-paper`/`general-homework` 使用 `academic`。
+- 仅保留 `general | academic` 双模式入口，不暴露多模板分叉。
+- MVP 阶段模式差异仅允许：标题编号策略、无序转有序触发策略。
 - 学术模式目标是“目录友好结构”，不是自动插入 Word TOC 字段。
+- 数学公式当前只承诺文本保真，不承诺公式渲染能力。
 - 规则实现集中在 normalize 阶段；render 层不重复做业务判断。
 - UI 当前为收口版本，除非明确需求，不做大改。
 - 禁止新增遥测/外部网络依赖。

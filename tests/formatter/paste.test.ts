@@ -43,4 +43,24 @@ describe("粘贴输入策略", () => {
     expect(result.value).toContain("- 映射：");
     expect(result.value).toContain("城市管理往往将这类人群视为“劳动力资源”。");
   });
+
+  it("传入 modeId 后，HTML 投影纯文本与当前模式保持一致", () => {
+    const html = "<p>1.2 研究背景</p>";
+
+    const general = resolvePastedInput({
+      plain: "",
+      html,
+      modeId: "general",
+    });
+    const academic = resolvePastedInput({
+      plain: "",
+      html,
+      modeId: "academic",
+    });
+
+    expect(general.mode).toBe("plain");
+    expect(academic.mode).toBe("plain");
+    expect(general.value.trim()).toBe("研究背景");
+    expect(academic.value.trim()).toBe("1.2 研究背景");
+  });
 });

@@ -1,11 +1,13 @@
 import { formatInput } from "@/features/formatter/index";
-import type { BlockNode, DocumentModel } from "@/features/formatter/model/types";
-import { renderClipboard } from "@/features/formatter/renderers/clipboard";
+import { defaultModeId, pasteDefaults } from "@/features/formatter/config/policies";
+import type { BlockNode, DocumentModel, ModeId } from "@/features/formatter/model/types";
+import { renderClipboardPayload } from "@/features/formatter/renderers/clipboard";
 
 export interface ResolvePastedInputArgs {
   plain?: string;
   html?: string;
   preserveRichText?: boolean;
+  modeId?: ModeId;
 }
 
 export interface ResolvePastedInputResult {
@@ -16,14 +18,15 @@ export interface ResolvePastedInputResult {
 export function resolvePastedInput(args: ResolvePastedInputArgs): ResolvePastedInputResult {
   const plain = (args.plain ?? "").trim();
   const html = (args.html ?? "").trim();
-  const preserveRichText = Boolean(args.preserveRichText);
+  const preserveRichText = args.preserveRichText ?? pasteDefaults.preserveRichText;
+  const modeId = args.modeId ?? defaultModeId;
 
   if (!preserveRichText && plain && html) {
-    const plainDoc = formatInput(args.plain ?? "");
-    const htmlDoc = formatInput(html);
+    const plainDoc = formatInput(args.plain ?? "", { modeId });
+    const htmlDoc = formatInput(html, { modeId });
 
     if (shouldPreferHtmlProjection(plainDoc, htmlDoc)) {
-      const projectedText = renderClipboard(htmlDoc).text.trim();
+      const projectedText = renderClipboardPayload(htmlDoc).text.trim();
       if (projectedText) {
         return {
           value: projectedText,
@@ -41,7 +44,7 @@ export function resolvePastedInput(args: ResolvePastedInputArgs): ResolvePastedI
   }
 
   if (preserveRichText && html) {
-    const sanitizedHtml = sanitizeHtmlToWhitelist(html);
+    const sanitizedHtml = sanitizeHtmlToWhitelist(html, modeId);
     if (sanitizedHtml) {
       return {
         value: sanitizedHtml,
@@ -58,7 +61,7 @@ export function resolvePastedInput(args: ResolvePastedInputArgs): ResolvePastedI
   }
 
   if (html) {
-    const text = sanitizeHtmlToPlainText(html);
+    const text = sanitizeHtmlToPlainText(html, modeId);
     if (text.trim()) {
       return {
         value: text,
@@ -73,14 +76,14 @@ export function resolvePastedInput(args: ResolvePastedInputArgs): ResolvePastedI
   };
 }
 
-function sanitizeHtmlToWhitelist(html: string): string {
-  const doc = formatInput(html);
-  return renderClipboard(doc).html;
+function sanitizeHtmlToWhitelist(html: string, modeId: ModeId): string {
+  const doc = formatInput(html, { modeId });
+  return renderClipboardPayload(doc).html;
 }
 
-function sanitizeHtmlToPlainText(html: string): string {
-  const doc = formatInput(html);
-  return renderClipboard(doc).text;
+function sanitizeHtmlToPlainText(html: string, modeId: ModeId): string {
+  const doc = formatInput(html, { modeId });
+  return renderClipboardPayload(doc).text;
 }
 
 function shouldPreferHtmlProjection(plainDoc: DocumentModel, htmlDoc: DocumentModel): boolean {
@@ -92,7 +95,7 @@ function shouldPreferHtmlProjection(plainDoc: DocumentModel, htmlDoc: DocumentMo
   }
 
   // 只有在 HTML 结构明显更完整时才覆盖 plain，避免普通文本粘贴行为被打扰。
-  return htmlScore >= plainScore + 2;
+  return htmlScore >= plainScore + pasteDefaults.htmlProjectionMinScoreAdvantage;
 }
 
 function structureScore(blocks: BlockNode[]): number {

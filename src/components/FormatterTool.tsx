@@ -5,15 +5,15 @@ import type { ClipboardEvent } from "react";
 import {
   detectSourceType,
   formatInput,
+  modeOptions,
   renderDocx,
-  templateOptions,
   type BlockNode,
   type DocumentModel,
-  type FormatOptions,
   type InlineNode,
-  type TemplateId,
+  type ModeId,
 } from "@/features/formatter";
 import { copyOptimizedToClipboard } from "@/features/formatter/clipboard";
+import { defaultModeId, normalizeDefaults } from "@/features/formatter/config/policies";
 import { resolvePastedInput } from "@/features/formatter/paste";
 import styles from "./FormatterTool.module.css";
 
@@ -27,20 +27,12 @@ const initialInput = `# 标题示例
 > 这是引用
 `;
 
-const defaultOptions: Omit<FormatOptions, "templateId"> = {
-  cleanupHeadingMarkers: true,
-  aggressiveBlankLineCleanup: true,
-  listRepair: true,
-};
-
 type StatusTone = "neutral" | "success" | "error";
 type CopyState = "idle" | "success" | "error";
 
 export function FormatterTool() {
   const [input, setInput] = useState(initialInput);
-  const [templateId, setTemplateId] = useState<TemplateId>("default");
-  const [options, setOptions] = useState(defaultOptions);
-  const [preserveRichPaste, setPreserveRichPaste] = useState(false);
+  const [modeId, setModeId] = useState<ModeId>(defaultModeId);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ message: string; tone: StatusTone }>({
     message: "已就绪",
@@ -53,10 +45,10 @@ export function FormatterTool() {
   const doc = useMemo(
     () =>
       formatInput(input, {
-        ...options,
-        templateId,
+        ...normalizeDefaults,
+        modeId,
       }),
-    [input, options, templateId],
+    [input, modeId],
   );
 
   useEffect(() => {
@@ -137,7 +129,7 @@ export function FormatterTool() {
     const resolved = resolvePastedInput({
       html,
       plain,
-      preserveRichText: preserveRichPaste,
+      modeId,
     });
     setInput(resolved.value);
 
@@ -158,77 +150,26 @@ export function FormatterTool() {
       <header className={styles.hero}>
         <p className={styles.kicker}>Formatter MVP</p>
         <h1>文本整理与格式转换</h1>
-        <p>把 AI 网页复制内容整理成更适合 Word / WPS 的格式。</p>
+        <p>把 AI 内容整理为更适合 WPS 标题样式映射与目录生成的结构。</p>
       </header>
 
       <section className={styles.panel}>
         <div className={styles.row}>
-          <label className={styles.label} htmlFor="template">
-            模板
+          <label className={styles.label} htmlFor="mode">
+            模式
           </label>
           <select
-            id="template"
+            id="mode"
             className={styles.select}
-            value={templateId}
-            onChange={(event) => setTemplateId(event.target.value as TemplateId)}
+            value={modeId}
+            onChange={(event) => setModeId(event.target.value as ModeId)}
           >
-            {templateOptions.map((item) => (
+            {modeOptions.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.label}
               </option>
             ))}
           </select>
-        </div>
-
-        <div className={styles.row}>
-          <span className={styles.label}>规则开关</span>
-          <label className={styles.switch}>
-            <input
-              type="checkbox"
-              checked={Boolean(options.cleanupHeadingMarkers)}
-              onChange={(event) =>
-                setOptions((prev) => ({
-                  ...prev,
-                  cleanupHeadingMarkers: event.target.checked,
-                }))
-              }
-            />
-            清理标题标记
-          </label>
-          <label className={styles.switch}>
-            <input
-              type="checkbox"
-              checked={Boolean(options.listRepair)}
-              onChange={(event) =>
-                setOptions((prev) => ({
-                  ...prev,
-                  listRepair: event.target.checked,
-                }))
-              }
-            />
-            列表修复
-          </label>
-          <label className={styles.switch}>
-            <input
-              type="checkbox"
-              checked={Boolean(options.aggressiveBlankLineCleanup)}
-              onChange={(event) =>
-                setOptions((prev) => ({
-                  ...prev,
-                  aggressiveBlankLineCleanup: event.target.checked,
-                }))
-              }
-            />
-            空行整理
-          </label>
-          <label className={styles.switch}>
-            <input
-              type="checkbox"
-              checked={preserveRichPaste}
-              onChange={(event) => setPreserveRichPaste(event.target.checked)}
-            />
-            保留富文本粘贴
-          </label>
         </div>
 
         <label htmlFor="raw-input" className={styles.label}>
@@ -287,8 +228,8 @@ export function FormatterTool() {
       <section className={styles.tip}>
         <h3>兼容建议</h3>
         <ul>
-          <li>复制到 Word / WPS 时，优先选择保留源格式相关粘贴选项。</li>
-          <li>如果目标环境限制富文本粘贴，可改用纯文本粘贴后再套用样式。</li>
+          <li>复制到 WPS 时，优先选择保留源格式相关粘贴选项。</li>
+          <li>建议在 WPS 中继续使用标题样式工具检查目录层级映射。</li>
         </ul>
       </section>
 

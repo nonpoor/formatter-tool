@@ -2,6 +2,7 @@
 
 Related Docs:
 - [PROJECT_BRIEF.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/PROJECT_BRIEF.md)
+- [PRODUCT_PHASES.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/PRODUCT_PHASES.md)
 - [TASKS.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/TASKS.md)
 
 ## 近期（当前阶段：MVP 收口）
@@ -26,6 +27,9 @@ Related Docs:
 
 3. 轻量部署体验完善
 - 优化公开使用说明（Vercel、临时隧道、风险提示）。
+
+4. 模板上传 + 智能填充设计落地
+- 先以 `TemplateSchema + FillPlan` 轻量架构验证模板映射可行性（详见 `PRODUCT_PHASES.md` 的 Phase B 草案）。
 
 ## 后期（明确延后）
 1. 模板上传与模板映射

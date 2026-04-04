@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatInput } from "@/features/formatter";
-import { renderClipboard } from "@/features/formatter/renderers/clipboard";
+import { renderClipboardPayload } from "@/features/formatter/renderers/clipboard";
 
 describe("列表结构保留", () => {
   it("保留有序列表下的无序子列表，不把合法圆点删除", () => {
@@ -13,7 +13,7 @@ describe("列表结构保留", () => {
       expect(doc.blocks[0].start).toBe(2);
     }
 
-    const clip = renderClipboard(doc);
+    const clip = renderClipboardPayload(doc);
     expect(clip.html).toContain('<ol start="2">');
     expect(clip.html).toContain("<ul>");
     expect(clip.text).toContain("2. 主项");

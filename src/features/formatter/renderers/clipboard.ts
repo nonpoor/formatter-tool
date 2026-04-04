@@ -6,7 +6,7 @@ export interface ClipboardPayload {
   text: string;
 }
 
-export function renderClipboard(doc: DocumentModel): ClipboardPayload {
+export function renderClipboardPayload(doc: DocumentModel): ClipboardPayload {
   const html = doc.blocks.map((block) => renderBlockHtml(block)).join("");
   const text = renderPlainText(doc.blocks).trim();
   return { html, text };

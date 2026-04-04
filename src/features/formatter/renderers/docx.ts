@@ -10,11 +10,15 @@ import {
   WidthType,
 } from "docx";
 import type { BlockNode, DocumentModel, InlineNode } from "@/features/formatter/model/types";
-import { getTemplateConfig } from "@/features/formatter/templates";
+import { docxDefaults } from "@/features/formatter/config/policies";
 
 export async function renderDocx(doc: DocumentModel): Promise<Blob> {
-  const template = getTemplateConfig(doc.meta.templateId);
-  const children = blocksToDocxChildren(doc.blocks, template.fontSize, template.paragraphSpacingAfter, template.headingSpacingAfter);
+  const children = blocksToDocxChildren(
+    doc.blocks,
+    docxDefaults.fontSize,
+    docxDefaults.paragraphSpacingAfter,
+    docxDefaults.headingSpacingAfter,
+  );
 
   const file = new DocxDocument({
     sections: [

@@ -1,7 +1,7 @@
 export type SourceType = "markdown" | "html" | "plain" | "mixed";
-export type StructureMode = "legacy" | "academic";
-
-export type TemplateId = "default" | "experiment-report" | "course-paper" | "general-homework";
+export type ModeId = "general" | "academic";
+export type HeadingNumberingPolicy = "strip" | "preserve";
+export type ItemExpressionPolicy = "step_or_sequence" | "explicit_step_only";
 
 export interface TextMarks {
   bold?: boolean;
@@ -66,7 +66,12 @@ export interface DocumentMeta {
     blockCount: number;
     charCount: number;
   };
-  templateId: TemplateId;
+  math: {
+    detected: boolean;
+    spanCount: number;
+    protectionApplied: boolean;
+  };
+  modeId: ModeId;
 }
 
 export interface DocumentModel {
@@ -78,9 +83,11 @@ export interface NormalizeOptions {
   cleanupHeadingMarkers?: boolean;
   aggressiveBlankLineCleanup?: boolean;
   listRepair?: boolean;
-  structureMode?: StructureMode;
+  modeId?: ModeId;
+  headingNumbering?: HeadingNumberingPolicy;
+  itemExpressionPolicy?: ItemExpressionPolicy;
 }
 
 export interface FormatOptions extends NormalizeOptions {
-  templateId?: TemplateId;
+  modeId?: ModeId;
 }

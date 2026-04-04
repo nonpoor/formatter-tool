@@ -1,9 +1,7 @@
 import type { DocumentModel } from "@/features/formatter/model/types";
-import { renderClipboard } from "@/features/formatter/renderers/clipboard";
+import { type ClipboardPayload, renderClipboardPayload } from "@/features/formatter/renderers/clipboard";
 
-export async function copyOptimizedToClipboard(doc: DocumentModel): Promise<void> {
-  const payload = renderClipboard(doc);
-
+export async function writeClipboardPayload(payload: ClipboardPayload): Promise<void> {
   if (typeof window === "undefined" || typeof navigator === "undefined") {
     return;
   }
@@ -25,3 +23,7 @@ export async function copyOptimizedToClipboard(doc: DocumentModel): Promise<void
   throw new Error("当前环境不支持自动复制，请手动复制结果。");
 }
 
+export async function copyOptimizedToClipboard(doc: DocumentModel): Promise<void> {
+  const payload = renderClipboardPayload(doc);
+  await writeClipboardPayload(payload);
+}

@@ -2,6 +2,7 @@ import { unified } from "unified";
 import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
 import type { BlockNode, InlineNode, TextMarks } from "@/features/formatter/model/types";
+import { maskMathSpans, restoreMathSpans } from "@/features/formatter/math/preservation";
 import { parseHtmlInput } from "@/features/formatter/parser/htmlParser";
 import { cleanTextValue, plainTextFromInlines, pushTextInline } from "@/features/formatter/utils";
 
@@ -17,8 +18,10 @@ type MdNode = {
 };
 
 export function parseMarkdownInput(input: string): BlockNode[] {
-  const tree = unified().use(remarkParse).use(remarkGfm).parse(input) as MdNode;
-  return parseMarkdownBlocks(tree.children ?? []);
+  const masked = maskMathSpans(input);
+  const tree = unified().use(remarkParse).use(remarkGfm).parse(masked.maskedText) as MdNode;
+  const blocks = parseMarkdownBlocks(tree.children ?? []);
+  return restoreMathInBlocks(blocks, masked.spans);
 }
 
 function parseMarkdownBlocks(nodes: MdNode[]): BlockNode[] {
@@ -178,4 +181,60 @@ function normalizeListStart(start?: number | null): number {
 function looksLikePipeTableText(text: string): boolean {
   const normalized = text.replace(/\r\n/g, "\n");
   return /\|/.test(normalized) && /\n/.test(normalized);
+}
+
+function restoreMathInBlocks(blocks: BlockNode[], spans: string[]): BlockNode[] {
+  return blocks.map((block) => {
+    if (block.type === "paragraph" || block.type === "heading") {
+      return {
+        ...block,
+        inlines: restoreMathInInlines(block.inlines, spans),
+      };
+    }
+
+    if (block.type === "list") {
+      return {
+        ...block,
+        items: block.items.map((item) => ({
+          blocks: restoreMathInBlocks(item.blocks, spans),
+        })),
+      };
+    }
+
+    if (block.type === "blockquote") {
+      return {
+        ...block,
+        blocks: restoreMathInBlocks(block.blocks, spans),
+      };
+    }
+
+    if (block.type === "table") {
+      return {
+        ...block,
+        headers: block.headers.map((cell) => restoreMathInInlines(cell, spans)),
+        rows: block.rows.map((row) => row.map((cell) => restoreMathInInlines(cell, spans))),
+      };
+    }
+
+    if (block.type === "preformatted") {
+      return {
+        ...block,
+        text: restoreMathSpans(block.text, spans),
+      };
+    }
+
+    return block;
+  });
+}
+
+function restoreMathInInlines(inlines: InlineNode[], spans: string[]): InlineNode[] {
+  return inlines.map((inline) => {
+    if (inline.type !== "text") {
+      return inline;
+    }
+    return {
+      ...inline,
+      value: restoreMathSpans(inline.value, spans),
+    };
+  });
 }

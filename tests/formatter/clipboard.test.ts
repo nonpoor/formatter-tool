@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderClipboard } from "@/features/formatter/renderers/clipboard";
+import { renderClipboardPayload } from "@/features/formatter/renderers/clipboard";
 import type { DocumentModel } from "@/features/formatter/model/types";
 
 const sampleDoc: DocumentModel = {
@@ -7,7 +7,12 @@ const sampleDoc: DocumentModel = {
     sourceType: "markdown",
     warnings: [],
     stats: { blockCount: 6, charCount: 16 },
-    templateId: "default",
+    math: {
+      detected: false,
+      spanCount: 0,
+      protectionApplied: false,
+    },
+    modeId: "general",
   },
   blocks: [
     { type: "heading", level: 1, inlines: [{ type: "text", value: "标题" }] },
@@ -42,7 +47,7 @@ const sampleDoc: DocumentModel = {
 
 describe("复制优化版输出", () => {
   it("输出保守 HTML 并提供纯文本", () => {
-    const output = renderClipboard(sampleDoc);
+    const output = renderClipboardPayload(sampleDoc);
 
     expect(output.html).toContain("<h1>");
     expect(output.html).toContain("<ul>");
@@ -78,7 +83,7 @@ describe("复制优化版输出", () => {
       ],
     };
 
-    const output = renderClipboard(doc);
+    const output = renderClipboardPayload(doc);
 
     expect(output.html).toContain("<ul>");
     expect(output.html).toContain("<li>第一行<br>第二行");
@@ -102,7 +107,7 @@ describe("复制优化版输出", () => {
       ],
     };
 
-    const output = renderClipboard(doc);
+    const output = renderClipboardPayload(doc);
     expect(output.html).toContain('<ol start="2">');
     expect(output.text).toContain("2. 二号");
     expect(output.text).toContain("3. 三号");
@@ -128,7 +133,7 @@ describe("复制优化版输出", () => {
       ],
     };
 
-    const output = renderClipboard(doc);
+    const output = renderClipboardPayload(doc);
     expect(output.html).toContain("<table>");
     expect(output.html).toContain("<thead>");
     expect(output.html).toContain("<tbody>");

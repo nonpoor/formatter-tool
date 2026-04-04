@@ -2,6 +2,7 @@
 
 Related Docs:
 - [START_HERE.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/START_HERE.md)
+- [PRODUCT_PHASES.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/PRODUCT_PHASES.md)
 - [ARCHITECTURE.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/ARCHITECTURE.md)
 - [ROADMAP.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/ROADMAP.md)
 
@@ -19,7 +20,7 @@ Related Docs:
 - 输出：
   - 复制优化版（HTML + 纯文本）
   - `.docx` 导出
-- 学术模板结构模式（academic）：目录友好的层级输出。
+- 双模式（general / academic）：目录友好的层级输出与兼容性平衡。
 
 ## 当前非目标（Out of Scope）
 - 模板上传与复杂模板映射。
@@ -30,7 +31,7 @@ Related Docs:
 ## 产品层面核心原则
 1. 稳定优先：优先降低“格式退步”而不是追求激进转换。
 2. 三端一致：Preview / Clipboard / Docx 必须基于同一结构模型。
-3. 模板分层：默认模板重兼容，学术模板重结构化。
+3. 模式收敛：MVP 只保留 `general` 与 `academic`，避免多模板扩张。
 4. 可验证：每个行为变化应有测试和文档记录。
 5. 边界清晰：当前阶段不扩展到 AI Agent 产品化实现。
 
@@ -38,3 +39,4 @@ Related Docs:
 - 阶段：MVP 后期收口。
 - 重点：学术结构稳定性、回归防退化、文档交接体系。
 - 发布目标：在真实作业样本下维持稳定输出后进入下一阶段。
+- 阶段细化与切换闸门：见 [PRODUCT_PHASES.md](/Users/nonpoor/coding/排版转换/formatter-tool/docs/context/PRODUCT_PHASES.md)。

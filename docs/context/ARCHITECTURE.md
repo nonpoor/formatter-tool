@@ -18,7 +18,7 @@ Related Docs:
 ## 关键模块与职责
 1. Parser（`src/features/formatter/parser/*`）
 - 职责：按来源类型将原始文本投影为 `DocumentModel.blocks`。
-- 原则：尽可能保留结构，不做模板语义决策。
+- 原则：尽可能保留结构，不做模式语义决策。
 
 2. Normalize（`src/features/formatter/normalize/index.ts`）
 - 职责：清洗空白、修复松散列表、学术结构化转换。
@@ -30,9 +30,9 @@ Related Docs:
 - `docx.ts`：将 `DocumentModel` 映射到 Word 结构（Heading 1-3、段落、表格等）。
 - 原则：只消费模型，不新增业务判断。
 
-4. Templates（`src/features/formatter/templates/index.ts`）
-- 职责：定义模板参数与 `structureMode`（`legacy | academic`）。
-- 现状：学术模板启用 academic，default 保持 legacy。
+4. Policies（`src/features/formatter/config/policies.ts`）
+- 职责：集中定义默认策略与模式差异（`general | academic`）。
+- 现状：MVP 阶段模式差异仅保留标题编号策略与无序转有序触发策略。
 
 5. Paste Strategy（`src/features/formatter/paste.ts`）
 - 职责：决定 `plain` 与 `html` 的粘贴优先策略。
@@ -42,7 +42,7 @@ Related Docs:
 定义于 `src/features/formatter/model/types.ts`：
 - `DocumentModel`：统一文档模型，所有渲染端共享。
 - `BlockNode`：`heading | paragraph | list | blockquote | preformatted | table`。
-- `NormalizeOptions`：含 `structureMode` 覆盖入口。
+- `NormalizeOptions`：含 `modeId`、`headingNumbering`、`itemExpressionPolicy` 覆盖入口。
 
 ## 目录结构（关键）
 - `src/app`：Next.js 页面入口

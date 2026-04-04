@@ -1,13 +1,15 @@
-import type { DocumentModel, TemplateId } from "@/features/formatter/model/types";
+import type { DocumentModel, ModeId } from "@/features/formatter/model/types";
+import { analyzeMathSpans } from "@/features/formatter/math/preservation";
 import { parseMarkdownInput } from "@/features/formatter/parser/markdownParser";
 import { parseHtmlInput } from "@/features/formatter/parser/htmlParser";
 import { parsePlainInput } from "@/features/formatter/parser/plainParser";
 import { detectSourceType } from "@/features/formatter/parser/sourceType";
-import { defaultTemplateId } from "@/features/formatter/templates";
+import { defaultModeId } from "@/features/formatter/config/policies";
 import { charCountFromBlocks } from "@/features/formatter/utils";
 
-export function parseInput(raw: string, templateId: TemplateId = defaultTemplateId): DocumentModel {
+export function parseInput(raw: string, modeId: ModeId = defaultModeId): DocumentModel {
   const sourceType = detectSourceType(raw);
+  const mathInfo = analyzeMathSpans(raw);
   const warnings: string[] = [];
 
   let blocks;
@@ -28,7 +30,12 @@ export function parseInput(raw: string, templateId: TemplateId = defaultTemplate
         blockCount: blocks.length,
         charCount: charCountFromBlocks(blocks),
       },
-      templateId,
+      math: {
+        detected: mathInfo.detected,
+        spanCount: mathInfo.spanCount,
+        protectionApplied: mathInfo.detected,
+      },
+      modeId,
     },
   };
 }
